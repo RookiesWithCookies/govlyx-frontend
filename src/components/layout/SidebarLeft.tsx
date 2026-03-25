@@ -114,8 +114,8 @@ const SidebarLeft = () => {
         </ul>
       </div>
 
-      {/* Official Updates - Mobile Only */}
-      <div className="rounded-xl bg-base-200 p-4 lg:hidden">
+      {/* Official Updates */}
+      <div className="rounded-xl bg-base-200 p-4">
         <h3 className="font-semibold text-sm mb-2">Official Updates</h3>
         <NavLink
           to="/department-feed"
