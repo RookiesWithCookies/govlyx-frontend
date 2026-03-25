@@ -10,7 +10,8 @@ import {
   X, Crown, Shield, User, VolumeX, Volume2, Ban, Trash2, 
   Save, Archive, Pencil, Heart, MessageSquare, Calendar, 
   Tag, MapPin, Rocket, PartyPopper, Plus, ChevronLeft, 
-  XCircle, Home, Link, Eye, Image as ImageIcon, RefreshCw
+  XCircle, Home, Link, Eye, Image as ImageIcon, RefreshCw,
+  SearchAlertIcon
 } from "lucide-react";
 import CommunityCard from "../components/community/CommunityCard";
 import CommunityHeader from "../components/community/CommunityHeader";
@@ -224,7 +225,7 @@ function avatar(name: string, image?: string | null) {
   if (image) return <img src={image} className="w-8 h-8 rounded-full object-cover" alt="" />;
   return (
     <div className="w-8 h-8 rounded-full overflow-hidden border border-base-300 bg-base-200 shrink-0">
-      <img src={`https://robohash.org/${encodeURIComponent(name || "?")}`} alt="Avatar" className="w-full h-full object-cover" />
+      <img src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(name || "?")}`} alt="Avatar" className="w-full h-full object-cover" />
     </div>
   );
 }
@@ -1701,7 +1702,7 @@ function DetailPanel({
               <div className="space-y-3">
                 {canPost && (
                   !showCompose
-                    ? <button className="w-full rounded-xl border border-dashed border-base-300 px-4 py-3 text-left text-sm opacity-60 hover:opacity-100 transition-opacity flex items-center gap-2"><Pencil size={16} /> Write something in {c.name}…</button>
+                    ? <button className="w-full rounded-xl border border-dashed border-base-300 px-4 py-3 text-left text-sm opacity-60 hover:opacity-100 transition-opacity flex items-center gap-2" onClick={() => setShowCompose(true)}><Pencil size={16} /> Write something in {c.name}…</button>
                     : <div className="rounded-xl border border-base-300 bg-base-200 p-3 space-y-2">
                         <textarea autoFocus className="textarea textarea-bordered w-full resize-none text-sm bg-base-100" rows={3}
                           placeholder={`Share something with ${c.name}…`} maxLength={2000}
@@ -2038,7 +2039,7 @@ const Community = () => {
           )}
           {!searchLoading && searchResults.length === 0 && committed && (
             <div className="text-center py-12 opacity-50 space-y-3">
-              <div className="text-4xl">🔍</div>
+              <div className="text-4xl"><SearchAlertIcon className="flex items-center justify-center" /></div>
               <p className="text-sm">No communities found for "{committed}"</p>
               <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create "{committed}"</button>
             </div>

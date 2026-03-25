@@ -699,19 +699,42 @@ export default function PostCard({
     }
   }
 
-  const cardClass = isGovt
-    ? "rounded-xl border border-info/30 bg-info/5 p-4"
+  const containerClass = isGovt
+    ? "overflow-hidden rounded-2xl border border-info/30 bg-info/5 transition-all duration-200"
     : isResolved
-    ? "rounded-xl border border-success/25 bg-success/5 p-4"
-    : "rounded-xl border border-base-300 bg-base-200 p-4";
+    ? "overflow-hidden rounded-2xl border border-success/25 bg-success/5 transition-all duration-200"
+    : "overflow-hidden rounded-2xl border border-base-300 bg-base-200 transition-all duration-200";
+
+  const hasMedia = ("mediaUrls" in post && post.mediaUrls && (post.mediaUrls as string[]).length > 0) || 
+                   ("imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0);
+
+  const imageUrl = ("mediaUrls" in post && post.mediaUrls && (post.mediaUrls as string[]).length > 0)
+    ? (post.mediaUrls as string[])[0]
+    : ("imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0)
+    ? (post.imageName.startsWith("http") ? post.imageName : `/uploads/posts/${post.imageName}`)
+    : null;
 
   return (
     <>
       <motion.div
-        whileHover={{ y: -2 }}
-        transition={{ duration: 0.15 }}
-        className={cardClass}
+        whileHover={{ y: -4 }}
+        transition={{ duration: 0.2 }}
+        className={`${containerClass} flex flex-col shadow-sm hover:shadow-md`}
       >
+        {/* Top 50% - Media */}
+        {hasMedia && imageUrl && (
+          <div className="relative h-64 sm:h-72 w-full overflow-hidden shrink-0 border-b border-base-300/50">
+            <img
+              src={imageUrl}
+              alt="Post content"
+              className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+          </div>
+        )}
+
+        {/* Bottom 50% - Details */}
+        <div className="flex flex-1 flex-col p-5">
         {/* Header */}
         <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           {isGovt && (
@@ -790,26 +813,6 @@ export default function PostCard({
         {/* Content */}
         <p className="mb-3 text-sm leading-relaxed">{post.content}</p>
 
-        {/* Media / Images */}
-        {"mediaUrls" in post && post.mediaUrls && (post.mediaUrls as string[]).length > 0 && (
-          <div className="mb-3 flex gap-2 overflow-x-auto">
-            {(post.mediaUrls as string[]).slice(0, 3).map((url, i) => (
-              <img
-                key={i}
-                src={url}
-                alt="media"
-                className="h-48 w-full rounded-xl object-cover shrink-0 max-w-[80%]"
-              />
-            ))}
-          </div>
-        )}
-        {"imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0 && (
-           <img
-             src={post.imageName.startsWith("http") ? post.imageName : `/uploads/posts/${post.imageName}`}
-             alt="Issue media"
-             className="mb-3 h-48 w-full rounded-xl object-cover"
-           />
-        )}
 
         {/* Tagged depts */}
         {isIssue && (post as IssuePost).taggedUsernames?.length > 0 && (
@@ -910,6 +913,7 @@ export default function PostCard({
             currentRole={currentUser?.role}
           />
         )}
+        </div>
       </motion.div>
 
       <ResolveModal

@@ -311,7 +311,7 @@ function SingleComment({
 
   const authorName = displayName(comment);
   const avatarSrc = comment.author?.profileImageUrl
-    || `https://robohash.org/${encodeURIComponent(comment.author?.username ?? "?")}`;
+    || `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(comment.author?.username ?? "?")}`;
 
   return (
     <div className={`${indentClass} space-y-1`}>

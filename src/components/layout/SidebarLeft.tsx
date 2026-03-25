@@ -71,7 +71,7 @@ const SidebarLeft = () => {
         <div className="flex items-center gap-3">
           <div className="avatar placeholder">
             <div className="w-10 rounded-full overflow-hidden bg-base-200 border border-base-300">
-              <img src={`https://robohash.org/${encodeURIComponent(displayName)}`} alt="Avatar" className="w-full h-full object-cover" />
+              <img src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(displayName)}`} alt="Avatar" className="w-full h-full object-cover" />
             </div>
           </div>
           <div>

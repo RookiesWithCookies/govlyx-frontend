@@ -20,7 +20,8 @@ import { useState, useRef, type JSX } from "react";
 
 // ─── API CONFIG ───────────────────────────────────────────────────────────────
 // Swap BASE_URL for your actual backend origin in .env or here directly.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+// BASE_URL is removed to use relative paths (Vite proxy)
+const BASE_URL = "";
 
 /**
  * Gets the JWT stored by your auth flow (localStorage key is configurable).
@@ -52,7 +53,7 @@ interface ApiResult {
  * Body: PostCreateDto JSON { content, targetPincode, broadcastScope? }
  */
 async function apiCreatePost(content: string, targetPincode: string): Promise<ApiResult> {
-  const res = await fetch(`${BASE_URL}/api/posts`, {
+  const res = await fetch(`/api/posts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({
@@ -81,7 +82,7 @@ async function apiCreatePostWithMedia(
   form.append("targetPincode", targetPincode);
   form.append("media", mediaFile);
 
-  const res = await fetch(`${BASE_URL}/api/posts/with-media`, {
+  const res = await fetch(`/api/posts/with-media`, {
     method: "POST",
     headers: { ...authHeaders() }, // no Content-Type — browser sets multipart boundary
     body: form,
@@ -96,7 +97,7 @@ async function apiCreatePostWithMedia(
  * SocialPostCreateDto: { content, hashtags?, mentionedUserIds?, allowComments? }
  */
 async function apiCreateSocialPost(content: string): Promise<ApiResult> {
-  const res = await fetch(`${BASE_URL}/api/social-posts/text`, {
+  const res = await fetch(`/api/social-posts/text`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ content, allowComments: true }),
@@ -118,7 +119,7 @@ async function apiCreateSocialPostWithMedia(
   form.append("post", new Blob([JSON.stringify({ content, allowComments: true })], { type: "application/json" }));
   files.forEach((f) => form.append("media", f));
 
-  const res = await fetch(`${BASE_URL}/api/social-posts/with-media`, {
+  const res = await fetch(`/api/social-posts/with-media`, {
     method: "POST",
     headers: { ...authHeaders() },
     body: form,
@@ -144,7 +145,7 @@ async function apiCreatePoll(payload: {
   allowMultipleVotes: boolean;       // ← matches CreatePollRequest.allowMultipleVotes
   showResultsBeforeExpiry?: boolean; // ← optional; backend defaults to true
 }): Promise<ApiResult> {
-  const res = await fetch(`${BASE_URL}/api/polls/create`, {   // ← /create not root
+  const res = await fetch(`/api/polls/create`, {   // ← /create not root
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),

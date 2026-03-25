@@ -19,7 +19,7 @@ const CommunityCard = ({ slug, name, description, members, avatarUrl, privacy, o
     else navigate(`/communities/${slug}`);
   };
 
-  const imgSrc = avatarUrl || `https://robohash.org/${encodeURIComponent(name)}`;
+  const imgSrc = avatarUrl || `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(name)}`;
 
   return (
     <div
@@ -35,7 +35,7 @@ const CommunityCard = ({ slug, name, description, members, avatarUrl, privacy, o
               src={imgSrc}
               alt={name}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              onError={e => { (e.target as HTMLImageElement).src = `https://robohash.org/${encodeURIComponent(name)}`; }}
+              onError={e => { (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(name)}`; }}
             />
           </div>
           {/* Public indicator dot */}

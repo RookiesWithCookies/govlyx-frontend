@@ -102,7 +102,14 @@ function useFeed(tab: FeedTab) {
         
         // Map frontend tabs to backend endpoints
         let endpoints: string[] = [];
-        if (tab === "for-you" || tab === "location") {
+        if (tab === "for-you") {
+          endpoints = [
+            `/api/feeds/enhanced/mixed`, 
+            `/api/social-posts/feed/home`, 
+            `/api/social-posts/feed/trending`,
+            `/api/social-posts/my-posts`
+          ];
+        } else if (tab === "location") {
           endpoints = [`/api/feeds/enhanced/area`, `/api/social-posts/feed/local`, `/api/social-posts/my-posts`];
         } else if (tab === "following") {
           endpoints = [`/api/social-posts/feed/home`];
