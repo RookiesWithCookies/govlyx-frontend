@@ -14,7 +14,7 @@ const SidebarRight = () => {
         {/* Trending Topics — unchanged */}
         <div className="rounded-xl bg-base-200 p-4">
           <div className="mb-3 flex items-center gap-2">
-            <Flame size={18} className="text-primary" />
+            <Flame size={18} className="text-blue-700" />
             <h3 className="font-semibold">Trending</h3>
           </div>
           <ul className="space-y-2 text-sm">

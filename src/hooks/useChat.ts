@@ -1,47 +1,43 @@
 // src/hooks/useChat.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// BUGS FIXED IN THIS VERSION:
+// BUGS FIXED (original, preserved):
 //
 //  BUG 1 — Messages disappear on sender side (optimistic message wiped):
-//    ROOT CAUSE: The onConnected history-merge algorithm was broken. It built
-//    [...serverMessages, ...pendingOptimistic, ...newServerMessages] which
-//    duplicated messages that were already in `prev` as server echoes. The
-//    final dedup pass kept wrong entries depending on array order, not time.
-//    FIX: Replace with a single, correct merge:
-//         • Union of serverMessages ∪ current prev
-//         • Deduplicated by messageId (server id wins over local- id when
-//           content+sender match, meaning the optimistic entry is replaced)
-//         • Sorted ascending by timestamp
+//    FIX: mergeMessages() — union + dedup by id, sorted by timestamp.
 //
 //  BUG 2 — Optimistic message not cleaned up correctly:
-//    ROOT CAUSE: The removal filter matched on senderId+content. If the user
-//    sent the same text twice quickly, the first server echo removed BOTH
-//    optimistic entries.
-//    FIX: Optimistic messages now carry a `correlationId` embedded in the
-//    messageId ("local-<correlationId>"). The server echo carries the same
-//    correlationId in a custom header field. Since we cannot change the server
-//    DTO, we fall back to content+sender matching but limit removal to exactly
-//    ONE entry (the first match), not all matches.
+//    FIX: Only ONE optimistic entry removed per (senderId+content) match.
 //
-//  BUG 3 — onConnected is called on every reconnect and always replaces state:
-//    FIX: History fetch is now idempotent — it merges, never replaces.
+//  BUG 3 — onConnected always replaces state:
+//    FIX: History fetch merges, never replaces.
 //
 //  BUG 4 — stableOnMatch never updated session state:
-//    ROOT CAUSE: MatchNotification carries yourAnonymousId/sessionId but the
-//    handler only checked matched:false. When the socket reconnects mid-session
-//    and a new match event arrives, the session object in state was never
-//    updated, so yourAnonymousId was stale and all dedup broke.
-//    FIX: onMatchRef.current now updates `session` when matched:true.
+//    FIX: onMatchRef.current updates `session` when matched:true.
 //
-//  BUG 5 — leaveSession set status to IDLE before the server confirmed:
-//    FIX: Status transitions to IDLE only after the API call resolves (or
-//    rejects). If offline, it still clears locally after a 3s timeout.
+//  BUG 5 — leaveSession set status to IDLE before server confirmed:
+//    FIX: Status transitions to IDLE only after API resolves (or 3s timeout).
+//
+// NEW — REFRESH-SAFE RECONNECT:
+//
+//  PROBLEM: On page refresh the app called startSearch() immediately, which
+//  hit the server's "already in session" guard and returned "Access Denied".
+//
+//  FIX:
+//    • sessionStore (localStorage) persists the sessionId across refreshes.
+//    • On mount, before any UI renders, we call GET /api/chat/session.
+//        ACTIVE + id matches → onMatchSuccess() directly (no startSearch()).
+//        anything else       → sessionStore.clear(), stay IDLE.
+//    • `restoring: true` is exposed so StrangerChat can show a spinner
+//      instead of flashing the IDLE "Start Chatting" screen.
+//    • sessionStore.save() called on every confirmed session entry.
+//    • sessionStore.clear() called on leave / partner-left / session end.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { chatSocket }    from "../api/chatSocket.service";
 import * as chatApi      from "../api/chatApi.service";
 import { ChatAuthError } from "../api/chatApi.service";
+import { sessionStore }  from "../store/sessionStore";
 import type {
   ChatMessageDto,
   ChatSessionDto,
@@ -61,6 +57,10 @@ export interface UseChatReturn {
   queueSize:     number | null;
   partnerTyping: boolean;
   error:         string | null;
+  /** True during the initial page-load session-restore check (~1 round-trip).
+   *  StrangerChat shows a spinner while this is true so the IDLE screen never
+   *  flashes on a user who is mid-session after a refresh. */
+  restoring:     boolean;
 
   startSearch:  () => Promise<void>;
   cancelSearch: () => Promise<void>;
@@ -74,58 +74,51 @@ export interface UseChatReturn {
 
 /**
  * Merge two message arrays:
- *  1. Union by messageId (serverMessages win on conflict)
+ *  1. Union by messageId (server messages win on id conflict)
  *  2. Replace each "local-*" optimistic entry if a real message with
- *     matching (senderId + content) now exists in the server set
- *  3. Sort ascending by timestamp
- *
- * This is the single canonical merge used in onConnected AND onMessage.
+ *     matching (senderId + content) now exists in the server set —
+ *     but only remove ONE optimistic entry per unique (senderId+content)
+ *     key, so duplicate text messages aren't wiped (BUG 2 fix).
+ *  3. Sort ascending by timestamp.
  */
 function mergeMessages(
   current: ChatMessageDto[],
-  incoming: ChatMessageDto[]
+  incoming: ChatMessageDto[],
 ): ChatMessageDto[] {
-  // Build a map of real messageIds from incoming
   const incomingById = new Map<string, ChatMessageDto>(
-    incoming.map((m) => [m.messageId, m])
+    incoming.map((m) => [m.messageId, m]),
   );
 
-  // For each incoming message, check if it can replace an optimistic entry
   const optimisticKeys = new Set(
     current
       .filter((m) => m.messageId.startsWith("local-"))
-      .map((m) => `${m.senderId}||${m.content}`)
+      .map((m) => `${m.senderId}||${m.content}`),
   );
 
-  // Track which optimistic entries have been "claimed" by a server echo
-  // so we only remove ONE optimistic entry per server message (not all duplicates)
   const claimedOptimistic = new Set<string>();
 
   const kept: ChatMessageDto[] = current.filter((m) => {
-    if (!m.messageId.startsWith("local-")) return true; // real message, keep
-    if (incomingById.has(m.messageId)) return false;    // same id arrived, drop
+    if (!m.messageId.startsWith("local-")) return true;
+    if (incomingById.has(m.messageId))     return false;
 
     const key = `${m.senderId}||${m.content}`;
     if (optimisticKeys.has(key)) {
-      // Check if any incoming message matches this optimistic one
       const matchingServer = incoming.find(
-        (s) => s.senderId === m.senderId && s.content === m.content
+        (s) => s.senderId === m.senderId && s.content === m.content,
       );
       if (matchingServer && !claimedOptimistic.has(key)) {
-        claimedOptimistic.add(key); // claim: remove this ONE optimistic entry
+        claimedOptimistic.add(key);
         return false;
       }
     }
-    return true; // no server match yet, keep the optimistic entry
+    return true;
   });
 
-  // Add all incoming messages that are not already in `kept`
-  const keptIds = new Set(kept.map((m) => m.messageId));
+  const keptIds   = new Set(kept.map((m) => m.messageId));
   const newEntries = incoming.filter((m) => !keptIds.has(m.messageId));
 
   return [...kept, ...newEntries].sort(
-    (a, b) =>
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
 }
 
@@ -138,20 +131,22 @@ export function useChat(): UseChatReturn {
   const [queueSize,     setQueueSize]     = useState<number | null>(null);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [error,         setError]         = useState<string | null>(null);
+  const [restoring,     setRestoring]     = useState(true); // ← NEW
 
   const pollRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const typingResetRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const typingThrottleTs = useRef<number>(0);
 
-  // Store latest session in a ref so socket handlers never go stale
+  // Keep latest session accessible in socket handlers without stale closure
   const sessionRef = useRef<ChatSessionDto | null>(null);
   useEffect(() => { sessionRef.current = session; }, [session]);
 
-  // Refs for stable socket handlers
+  // Stable refs for socket handlers (avoid re-subscribing on every render)
   const onMessageRef = useRef<(msg: ChatMessageDto) => void>(() => {});
   const onTypingRef  = useRef<(n: TypingNotification) => void>(() => {});
   const onMatchRef   = useRef<(n: MatchNotification) => void>(() => {});
 
+  // Global cleanup on unmount
   useEffect(() => {
     return () => {
       _stopPolling();
@@ -161,7 +156,7 @@ export function useChat(): UseChatReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Internal helpers ────────────────────────────────────────────────────────
+  // ── Internal helpers ──────────────────────────────────────────────────────
 
   const _stopPolling = () => {
     if (pollRef.current !== null) {
@@ -177,19 +172,28 @@ export function useChat(): UseChatReturn {
     }
   };
 
-  // ── Socket handler implementations (kept fresh via refs) ────────────────────
+  const _resetLocalState = () => {
+    setStatus("IDLE");
+    setMessages([]);
+    setSession(null);
+    sessionRef.current = null;
+    setQueueSize(null);
+    setPartnerTyping(false);
+    setError(null);
+    sessionStore.clear(); // ← NEW: always clear storage on full reset
+  };
+
+  // ── Socket handler implementations (kept fresh via refs) ──────────────────
 
   onMessageRef.current = (msg: ChatMessageDto) => {
-    // USER_LEFT: partner left → transition to PARTNER_LEFT
     if (msg.messageType === "USER_LEFT" || msg.messageType === "CHAT_ENDED") {
       setMessages((prev) => mergeMessages(prev, [msg]));
       setStatus("PARTNER_LEFT");
+      sessionStore.clear(); // ← NEW
       chatSocket.disconnect();
       _stopPolling();
       return;
     }
-
-    // Normal TEXT / SYSTEM message: merge (handles optimistic dedup)
     setMessages((prev) => mergeMessages(prev, [msg]));
   };
 
@@ -198,23 +202,22 @@ export function useChat(): UseChatReturn {
     _clearTypingReset();
     typingResetRef.current = setTimeout(
       () => setPartnerTyping(false),
-      TYPING_RESET_MS
+      TYPING_RESET_MS,
     );
   };
 
   onMatchRef.current = (n: MatchNotification) => {
     if (!n.matched) {
-      // Partner left — server sent this via /queue/match
       setStatus("PARTNER_LEFT");
+      sessionStore.clear(); // ← NEW
       chatSocket.disconnect();
       _stopPolling();
       return;
     }
-
-    // BUG 4 FIX: update session when a new match arrives (e.g. after reconnect)
+    // BUG 4 FIX: update session when a fresh match event arrives (e.g. after reconnect)
     if (n.sessionId && n.yourAnonymousId) {
       setSession((prev) => {
-        if (!prev) return prev; // session was already set by REST response
+        if (!prev) return prev;
         return {
           ...prev,
           sessionId:          n.sessionId,
@@ -225,18 +228,12 @@ export function useChat(): UseChatReturn {
     }
   };
 
-  // Stable references that never change identity (safe to pass to useCallback deps)
-  const stableOnMessage = useCallback(
-    (msg: ChatMessageDto) => onMessageRef.current(msg), []
-  );
-  const stableOnTyping = useCallback(
-    (n: TypingNotification) => onTypingRef.current(n), []
-  );
-  const stableOnMatch = useCallback(
-    (n: MatchNotification) => onMatchRef.current(n), []
-  );
+  // Stable references — identity never changes, so safe as useCallback deps
+  const stableOnMessage = useCallback((msg: ChatMessageDto) => onMessageRef.current(msg), []);
+  const stableOnTyping  = useCallback((n: TypingNotification) => onTypingRef.current(n), []);
+  const stableOnMatch   = useCallback((n: MatchNotification) => onMatchRef.current(n), []);
 
-  // ── Connect + history load ──────────────────────────────────────────────────
+  // ── Connect + history load ────────────────────────────────────────────────
 
   const onMatchSuccess = useCallback(
     async (sess: ChatSessionDto) => {
@@ -244,6 +241,7 @@ export function useChat(): UseChatReturn {
       sessionRef.current = sess;
       setStatus("CONNECTED");
       setError(null);
+      sessionStore.save(sess.sessionId); // ← NEW: persist on every confirmed session
 
       chatSocket.connect({
         onMessage:    stableOnMessage,
@@ -255,9 +253,7 @@ export function useChat(): UseChatReturn {
           setStatus("ERROR");
         },
 
-        // BUG 1 FIX: Use mergeMessages instead of replacing state.
-        // This preserves any optimistic messages that raced with the socket
-        // connect, and is safe to call on every reconnect.
+        // BUG 1 + BUG 3 FIX: merge, never replace, so optimistic messages survive reconnects
         onConnected: () => {
           chatApi
             .getMessages(50)
@@ -267,15 +263,15 @@ export function useChat(): UseChatReturn {
               }
             })
             .catch(() => {
-              // Non-fatal: messages already visible from optimistic/echoes
+              // Non-fatal: chat is still usable from optimistic/echo messages
             });
         },
       });
     },
-    [stableOnMessage, stableOnTyping, stableOnMatch]
+    [stableOnMessage, stableOnTyping, stableOnMatch],
   );
 
-  // ── Polling for match ───────────────────────────────────────────────────────
+  // ── Polling for match (fallback while in queue) ───────────────────────────
 
   const _startPolling = useCallback(() => {
     _stopPolling();
@@ -297,7 +293,57 @@ export function useChat(): UseChatReturn {
     }, POLL_MS);
   }, [onMatchSuccess]);
 
-  // ── Public API ──────────────────────────────────────────────────────────────
+  // ── NEW: Page-load session restore ───────────────────────────────────────
+  //
+  // Runs exactly once on mount. Checks localStorage for a persisted sessionId,
+  // then asks the server whether it's still ACTIVE.
+  //
+  // • ACTIVE + id matches → onMatchSuccess() [skip startSearch entirely]
+  // • anything else       → sessionStore.clear(), fall through to IDLE
+  //
+  // `restoring` stays true until this check completes so StrangerChat can
+  // show a spinner instead of flashing the "Start Chatting" screen.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tryRestore() {
+      const storedId = sessionStore.get();
+
+      if (!storedId) {
+        if (!cancelled) setRestoring(false);
+        return;
+      }
+
+      try {
+        const res = await chatApi.getCurrentSession();
+
+        if (cancelled) return;
+
+        if (
+          res.success &&
+          res.data &&
+          res.data.status === "ACTIVE" &&
+          res.data.sessionId === storedId
+        ) {
+          await onMatchSuccess(res.data); // restores to CONNECTED with history
+        } else {
+          // Session gone, ended, or mismatched — start fresh
+          sessionStore.clear();
+        }
+      } catch {
+        // Network error — don't block the user, just show the IDLE screen
+        sessionStore.clear();
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    }
+
+    tryRestore();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ← intentionally empty: run exactly once on mount
+
+  // ── Public API ────────────────────────────────────────────────────────────
 
   const startSearch = useCallback(async () => {
     setError(null);
@@ -306,6 +352,7 @@ export function useChat(): UseChatReturn {
     sessionRef.current = null;
     setQueueSize(null);
     setStatus("SEARCHING");
+    sessionStore.clear(); // ← NEW: clear stale storage before a fresh search
     chatSocket.disconnect(); // clean up any stale connection
 
     try {
@@ -331,7 +378,7 @@ export function useChat(): UseChatReturn {
 
   const cancelSearch = useCallback(async () => {
     _stopPolling();
-    try { await chatApi.cancelSearch(); } catch (_) { /* fire-and-forget */ }
+    try { await chatApi.cancelSearch(); } catch { /* fire-and-forget */ }
     setStatus("IDLE");
   }, []);
 
@@ -344,9 +391,8 @@ export function useChat(): UseChatReturn {
       return;
     }
 
-    // BUG 2 FIX: Only append optimistic message when yourAnonymousId is known.
-    // Use a stable key so mergeMessages can match exactly ONE optimistic entry
-    // per (senderId+content) pair even if the same text is sent twice.
+    // BUG 2 FIX: use sessionRef (not state) so this callback is stable,
+    // and only remove ONE optimistic entry per (senderId+content) pair.
     const senderAnonymousId = sessionRef.current?.yourAnonymousId;
     if (senderAnonymousId) {
       const optimistic: ChatMessageDto = {
@@ -355,14 +401,13 @@ export function useChat(): UseChatReturn {
         content:     trimmed,
         messageType: "TEXT",
         timestamp:   new Date().toISOString(),
-        // Embed replyToId so the quoted preview renders immediately on sender's side
         ...(replyToId ? { replyToId } : {}),
       };
       setMessages((prev) => [...prev, optimistic]);
     }
 
     chatSocket.sendMessage(trimmed);
-  }, []); // no dep on session — reads via sessionRef
+  }, []); // reads session via sessionRef — no stale closure
 
   const notifyTyping = useCallback(() => {
     const now = Date.now();
@@ -371,47 +416,33 @@ export function useChat(): UseChatReturn {
     if (chatSocket.isConnected) chatSocket.sendTyping();
   }, []);
 
-  // BUG 5 FIX: Don't set IDLE until server confirms (or timeout). This
-  // prevents a race where the UI resets before the server sends the
-  // partner-left notification, causing the partner to get stuck.
+  // BUG 5 FIX: Don't set IDLE until server confirms (or 3s timeout).
   const leaveSession = useCallback(async () => {
     _stopPolling();
     chatSocket.disconnect();
+    sessionStore.clear(); // ← NEW: clear storage on intentional leave
 
-    // Fire the leave API; give it 3 s before forcing local reset
-    const leaveTimeout = setTimeout(() => {
-      _resetLocalState();
-    }, 3_000);
+    const leaveTimeout = setTimeout(() => { _resetLocalState(); }, 3_000);
 
     try {
       await chatApi.leaveSession();
-    } catch (_) {
-      // ignore — partner was already notified server-side if connection existed
+    } catch {
+      // ignore — server-side partner notification is best-effort
     } finally {
       clearTimeout(leaveTimeout);
       _resetLocalState();
     }
   }, []);
 
-  const _resetLocalState = () => {
-    setStatus("IDLE");
-    setMessages([]);
-    setSession(null);
-    sessionRef.current = null;
-    setQueueSize(null);
-    setPartnerTyping(false);
-    setError(null);
-  };
-
   const resetChat = useCallback(() => {
     _stopPolling();
     _clearTypingReset();
     chatSocket.disconnect();
-    _resetLocalState();
+    _resetLocalState(); // already calls sessionStore.clear()
   }, []);
 
   return {
-    status, messages, session, queueSize, partnerTyping, error,
+    status, messages, session, queueSize, partnerTyping, error, restoring,
     startSearch, cancelSearch, sendMessage, notifyTyping, leaveSession, resetChat,
   };
 }

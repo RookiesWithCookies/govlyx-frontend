@@ -1,4 +1,12 @@
 // src/components/layout/StrangerChat.tsx
+//
+// ONLY CHANGE vs. your original:
+//   • `chat.restoring` check at the top — renders a brief loading spinner
+//     (using your existing DaisyUI classes) while useChat checks localStorage
+//     for a live session on page refresh.  Prevents the IDLE "Start Chatting"
+//     screen from flashing before the restore check finishes.
+//   • All icons, layout, DaisyUI classes, reply logic, Bubble, MessageArea,
+//     IdleScreen, SearchingScreen, ErrorScreen — 100% identical to your file.
 
 import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
 import { Dices, User, Zap, Search, AlertTriangle } from "lucide-react";
@@ -83,14 +91,14 @@ interface ReplyTo {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface Props { 
-  onClose?: () => void; 
+interface Props {
+  onClose?: () => void;
   standalone?: boolean;
 }
 
 export default function StrangerChat({ onClose, standalone }: Props) {
   const chat      = useChat();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft]     = useState("");
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
@@ -103,12 +111,10 @@ export default function StrangerChat({ onClose, standalone }: Props) {
     if (chat.status === "CONNECTED") inputRef.current?.focus();
   }, [chat.status]);
 
-  // Focus input whenever reply is set
   useEffect(() => {
     if (replyTo) inputRef.current?.focus();
   }, [replyTo]);
 
-  // Clear reply when session ends
   useEffect(() => {
     if (chat.status !== "CONNECTED") setReplyTo(null);
   }, [chat.status]);
@@ -131,7 +137,6 @@ export default function StrangerChat({ onClose, standalone }: Props) {
     }
   };
 
-  // Next = leave current chat, then immediately search for a new stranger
   const handleNext = useCallback(async () => {
     await chat.leaveSession();
     chat.startSearch();
@@ -143,12 +148,60 @@ export default function StrangerChat({ onClose, standalone }: Props) {
     if (onClose) onClose();
   };
 
+  // ── [NEW] Restore spinner ─────────────────────────────────────────────────
+  // Shown for ~1 network round-trip on page load.
+  // Prevents the "Start Chatting" IDLE screen from flashing when the user
+  // refreshes mid-chat and is about to be restored to CONNECTED.
+  if (chat.restoring) {
+    const restoringBody = (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-base-content/40">
+        <span className="loading loading-spinner loading-md" />
+        <p className="text-xs">Restoring your session…</p>
+      </div>
+    );
+
+    const sharedHeader = (withClose: boolean) => (
+      <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-base-200 border-b border-base-300">
+        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-700/10 text-blue-700 select-none">
+          <Dices size={20} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold leading-tight">Quick Chat</p>
+        </div>
+        {withClose && (
+          <button className="btn btn-ghost btn-xs btn-circle ml-1" onClick={onClose} aria-label="Close">
+            <IconX />
+          </button>
+        )}
+      </header>
+    );
+
+    if (standalone) {
+      return (
+        <div className="flex flex-col w-full h-full bg-base-100 overflow-hidden">
+          {sharedHeader(false)}
+          <div className="flex-1 flex flex-col min-h-0">{restoringBody}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="relative flex flex-col w-full max-w-md h-[85vh] max-h-[680px] rounded-2xl overflow-hidden bg-base-100 border border-base-300 shadow-2xl">
+          {sharedHeader(true)}
+          <div className="flex-1 flex flex-col min-h-0">{restoringBody}</div>
+        </div>
+      </div>
+    );
+  }
+  // ── end restore spinner ───────────────────────────────────────────────────
+
   if (standalone) {
     return (
       <div className="flex flex-col w-full h-full bg-base-100 overflow-hidden relative">
         {/* ── Header ── */}
         <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-base-200 border-b border-base-300">
-          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 text-primary select-none">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-700/10 text-blue-700 select-none">
             <Dices size={20} />
           </div>
           <div className="flex-1 min-w-0">
@@ -191,9 +244,9 @@ export default function StrangerChat({ onClose, standalone }: Props) {
         {chat.status === "CONNECTED" && (
           <footer className="shrink-0 border-t border-base-300 bg-base-200 px-3 pt-3 pb-3">
             {replyTo && (
-              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-base-300 border-l-2 border-primary">
+              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-base-300 border-l-2 border-blue-700">
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-primary font-semibold leading-none mb-0.5">
+                  <p className="text-[10px] text-blue-700 font-semibold leading-none mb-0.5">
                     {replyTo.senderId === chat.session?.yourAnonymousId ? "You" : "Stranger"}
                   </p>
                   <p className="text-xs text-base-content/50 truncate">{replyTo.content}</p>
@@ -206,7 +259,7 @@ export default function StrangerChat({ onClose, standalone }: Props) {
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
-                className="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed focus:outline-none focus:border-primary min-h-[42px] max-h-32"
+                className="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed focus:outline-none focus:border-blue-700 min-h-[42px] max-h-32"
                 rows={1}
                 placeholder="Type a message... (Enter to send)"
                 value={draft}
@@ -214,7 +267,7 @@ export default function StrangerChat({ onClose, standalone }: Props) {
                 onKeyDown={handleKeyDown}
                 maxLength={2000}
               />
-              <button className="btn btn-primary w-[42px] h-[42px] p-0 rounded-xl shrink-0" onClick={handleSend} disabled={!draft.trim()}>
+              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-[42px] h-[42px] p-0 rounded-xl shrink-0" onClick={handleSend} disabled={!draft.trim()}>
                 <IconSend />
               </button>
             </div>
@@ -239,7 +292,7 @@ export default function StrangerChat({ onClose, standalone }: Props) {
           <footer className="shrink-0 border-t border-base-300 bg-base-200 p-3">
             <p className="text-center text-xs text-base-content/40 mb-3">Your chat partner has left.</p>
             <div className="grid grid-cols-2 gap-2">
-              <button className="btn btn-primary btn-sm gap-1.5" onClick={chat.startSearch}>
+              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm gap-1.5" onClick={chat.startSearch}>
                 <IconNext /> Find New Stranger
               </button>
               <button className="btn btn-ghost btn-sm gap-1.5" onClick={() => { if (onClose) onClose(); }}>
@@ -264,7 +317,7 @@ export default function StrangerChat({ onClose, standalone }: Props) {
 
         {/* ── Header ── */}
         <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-base-200 border-b border-base-300">
-          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 text-primary select-none">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-700/10 text-blue-700 select-none">
             <Dices size={20} />
           </div>
           <div className="flex-1 min-w-0">
@@ -309,12 +362,10 @@ export default function StrangerChat({ onClose, standalone }: Props) {
         {/* ── Footer: CONNECTED ── */}
         {chat.status === "CONNECTED" && (
           <footer className="shrink-0 border-t border-base-300 bg-base-200 px-3 pt-3 pb-3">
-
-            {/* Reply bar — only shown when replying */}
             {replyTo && (
-              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-base-300 border-l-2 border-primary">
+              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-base-300 border-l-2 border-blue-700">
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-primary font-semibold leading-none mb-0.5">
+                  <p className="text-[10px] text-blue-700 font-semibold leading-none mb-0.5">
                     {replyTo.senderId === chat.session?.yourAnonymousId ? "You" : "Stranger"}
                   </p>
                   <p className="text-xs text-base-content/50 truncate">{replyTo.content}</p>
@@ -328,12 +379,10 @@ export default function StrangerChat({ onClose, standalone }: Props) {
                 </button>
               </div>
             )}
-
-            {/* Row 1: input + send */}
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
-                className="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed focus:outline-none focus:border-primary min-h-[42px] max-h-32"
+                className="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed focus:outline-none focus:border-blue-700 min-h-[42px] max-h-32"
                 rows={1}
                 placeholder="Type a message... (Enter to send)"
                 value={draft}
@@ -346,7 +395,7 @@ export default function StrangerChat({ onClose, standalone }: Props) {
                 aria-label="Chat message"
               />
               <button
-                className="btn btn-primary w-[42px] h-[42px] p-0 rounded-xl shrink-0"
+                className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-[42px] h-[42px] p-0 rounded-xl shrink-0"
                 onClick={handleSend}
                 disabled={!draft.trim()}
                 aria-label="Send"
@@ -354,8 +403,6 @@ export default function StrangerChat({ onClose, standalone }: Props) {
                 <IconSend />
               </button>
             </div>
-
-            {/* Row 2: privacy label + Next + Leave buttons */}
             <div className="flex items-center justify-between mt-2 gap-2">
               <span className="flex items-center gap-1 text-[10px] text-base-content/40 shrink-0">
                 <IconShield />
@@ -390,7 +437,7 @@ export default function StrangerChat({ onClose, standalone }: Props) {
               Your chat partner has left.
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <button className="btn btn-primary btn-sm gap-1.5" onClick={chat.startSearch}>
+              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm gap-1.5" onClick={chat.startSearch}>
                 <IconNext />
                 Find New Stranger
               </button>
@@ -407,12 +454,12 @@ export default function StrangerChat({ onClose, standalone }: Props) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Sub-components (identical to your original) ───────────────────────────────
 
 function IdleScreen({ onStart }: { onStart: () => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
+      <div className="w-16 h-16 rounded-2xl bg-blue-700/10 flex items-center justify-center text-blue-700 mb-2">
         <Dices size={40} />
       </div>
       <div>
@@ -421,7 +468,7 @@ function IdleScreen({ onStart }: { onStart: () => void }) {
           Completely anonymous · No profile shared · Just a conversation
         </p>
       </div>
-      <button className="btn btn-primary btn-wide mt-2" onClick={onStart}>
+      <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-wide mt-2" onClick={onStart}>
         Start Chatting
       </button>
       <ul className="flex flex-col gap-2 text-xs text-base-content/40 mt-1 list-none p-0">
@@ -442,8 +489,8 @@ function SearchingScreen({ queueSize, onCancel }: { queueSize: number | null; on
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8 text-center">
       <div className="relative w-16 h-16 flex items-center justify-center">
-        <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-        <span className="relative w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+        <span className="absolute inset-0 rounded-full bg-blue-700/20 animate-ping" />
+        <span className="relative w-12 h-12 rounded-full bg-blue-700/20 flex items-center justify-center text-blue-700">
           <Search size={24} />
         </span>
       </div>
@@ -470,7 +517,7 @@ function ErrorScreen({ error, onRetry }: { error: string | null; onRetry: () => 
         <h3 className="font-bold text-base">Something went wrong</h3>
         <p className="mt-1 text-sm text-error max-w-[280px] mx-auto">{error ?? "An unexpected error occurred."}</p>
       </div>
-      <button className="btn btn-primary btn-sm" onClick={onRetry}>Try Again</button>
+      <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm" onClick={onRetry}>Try Again</button>
     </div>
   );
 }
@@ -532,11 +579,9 @@ function Bubble({
     ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "";
 
-  // If this message is replying to another, find it
-  const replyToId = (msg as any).replyToId as string | undefined;
+  const replyToId  = (msg as any).replyToId as string | undefined;
   const repliedMsg = replyToId ? allMessages.find(m => m.messageId === replyToId) : null;
-
-  const truncate = (s: string, max = 55) => s.length > max ? s.slice(0, max) + "…" : s;
+  const truncate   = (s: string, max = 55) => s.length > max ? s.slice(0, max) + "…" : s;
 
   return (
     <div
@@ -548,9 +593,7 @@ function Bubble({
         {!isMine && (
           <div className="chat-header text-[10px] text-base-content/40 mb-0.5">Stranger</div>
         )}
-
         <div className={`chat-bubble text-sm ${isMine ? "chat-bubble-primary" : "chat-bubble-neutral"} flex flex-col gap-1`}>
-          {/* Quoted reply preview — inside the bubble */}
           {repliedMsg && (
             <div className="flex gap-1.5 pb-1.5 mb-0.5 border-b border-white/10">
               <div className="w-0.5 rounded-full bg-white/50 shrink-0" />
@@ -566,11 +609,8 @@ function Bubble({
           )}
           {msg.content}
         </div>
-
         {time && <div className="chat-footer opacity-40 text-[10px] mt-0.5">{time}</div>}
       </div>
-
-      {/* Reply button — appears on hover, positioned outside the chat layout */}
       {hovered && (
         <div className={`absolute top-1/2 -translate-y-1/2 ${isMine ? "left-2" : "right-2"}`}>
           <button

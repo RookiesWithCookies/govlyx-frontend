@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Flame, Clock, ArrowUp, MapPin, SlidersHorizontal } from "lucide-react";
+import { Flame, Clock, ArrowUp, SlidersHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PostCard from "../components/post/PostCard";
 import type { AnyPost, SocialPost, GovernmentPost } from "../components/post/PostCard";
@@ -32,20 +32,32 @@ interface SocialPostDto {
   broadcastScopeDescription?: string;
 }
 
-type FeedTab = "all" | "location" | "following" | "hot" | "new" | "top" | "for-you";
+type FeedTab = "all" | "location" | "following" | "hot" | "new" | "top" | "for-you" | "official";
 
 function getAuthToken(): string | null {
   return localStorage.getItem("token") || "demo-token-123";
 }
 
-function toPostCardPost(dto: SocialPostDto): AnyPost {
-  if (dto.isGovernmentBroadcast) {
+function toPostCardPost(dto: any): AnyPost {
+  if (dto.isBroadcastPost || dto.broadcastScope) {
     return {
       ...dto,
       variant: "government",
       department: dto.department ?? dto.userDisplayName ?? dto.username,
       isGovernmentBroadcast: true,
+      commentCount: dto.commentCount ?? 0,
+      likeCount: dto.likeCount ?? 0,
+      shareCount: dto.shareCount ?? 0,
     } as GovernmentPost;
+  }
+  if (dto.status || dto.targetPincode) {
+    return {
+      ...dto,
+      variant: "issue",
+      commentCount: dto.commentCount ?? 0,
+      likeCount: dto.likeCount ?? 0,
+      shareCount: dto.shareCount ?? 0,
+    } as AnyPost;
   }
   return { ...dto, variant: "social" } as SocialPost;
 }
@@ -70,33 +82,7 @@ const PostSkeleton = () => (
 );
 
 function useFeed(tab: FeedTab) {
-  const [posts, setPosts] = useState<AnyPost[]>([
-    {
-      id: 1,
-      variant: "social",
-      content: "Excited to see Govlyx coming together! Looking forward to modernizing our community interactions. #Govlyx #Community",
-      username: "Sambh",
-      userDisplayName: "Sambh Sharma",
-      timeAgo: "2h ago",
-      likeCount: 42,
-      commentCount: 5,
-      shareCount: 12,
-      isLikedByCurrentUser: true,
-    },
-    {
-      id: 2,
-      variant: "government",
-      content: "Maintenance notice: Infrastructure repairs on Main Street starting this Friday. Expect minor delays. #PublicWorks",
-      department: "Public Works Department",
-      username: "PWD_Official",
-      timeAgo: "4h ago",
-      likeCount: 156,
-      commentCount: 23,
-      shareCount: 89,
-      isGovernmentBroadcast: true,
-      broadcastScope: "AREA",
-    }
-  ]);
+  const [posts, setPosts] = useState<AnyPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -110,28 +96,81 @@ function useFeed(tab: FeedTab) {
       setError(null);
       try {
         const token = getAuthToken();
-        const params = new URLSearchParams({ size: String(FEED_SIZE) });
-        if (cursor !== null) params.set("lastPostId", String(cursor));
-        const res = await fetch(`/api/v1/feed/${tab}?${params}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.status === 401 || res.status === 403) {
+        const params = new URLSearchParams({ limit: String(FEED_SIZE) });
+        if (cursor !== null) params.set("beforeId", String(cursor));
+        if (tab === "hot" || tab === "new" || tab === "top") params.set("sort", tab);
+        
+        // Map frontend tabs to backend endpoints
+        let endpoints: string[] = [];
+        if (tab === "for-you" || tab === "location") {
+          endpoints = [`/api/feeds/enhanced/area`, `/api/social-posts/feed/local`, `/api/social-posts/my-posts`];
+        } else if (tab === "following") {
+          endpoints = [`/api/social-posts/feed/home`];
+        } else if (tab === "official") {
+          endpoints = [`/api/feeds/enhanced/country`];
+        } else {
+          endpoints = [
+            `/api/feeds/enhanced/mixed`, 
+            `/api/social-posts/feed/home`, 
+            `/api/social-posts/feed/trending`,
+            `/api/social-posts/my-posts`
+          ];
+        }
+
+        const responses = await Promise.all(
+          endpoints.map((ep) =>
+            fetch(`${ep}?${params}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            }).catch(() => null)
+          )
+        );
+
+        let mergedData: any[] = [];
+        let anyHasMore = false;
+        let newCursor: number | null = null;
+        let authError = false;
+
+        for (const res of responses) {
+          if (!res) continue;
+          if (res.status === 401 || res.status === 403) {
+            authError = true;
+            continue;
+          }
+          if (!res.ok) continue;
+
+          const data: any = await res.json().catch(() => ({}));
+          const pageData = data.data ?? data;
+          const items = pageData.content ?? pageData.items ?? [];
+          mergedData = [...mergedData, ...items];
+          if (pageData.hasMore || pageData.hasNextPage) anyHasMore = true;
+          
+          // Try to get the lowest ID for cursor
+          const next = pageData.nextCursor ?? pageData.lastId ?? pageData.nextCursorId;
+          if (next && (!newCursor || next < newCursor)) {
+            newCursor = next;
+          }
+        }
+
+        if (authError && mergedData.length === 0) {
           setFatalError(true);
           setHasMore(false);
           throw new Error("Not authenticated — please log in.");
         }
-        const contentType = res.headers.get("content-type") ?? "";
-        if (!contentType.includes("application/json")) {
-          setFatalError(true);
-          setHasMore(false);
-          throw new Error(`API unreachable (${res.status}). Check your Vite proxy.`);
-        }
-        if (!res.ok) throw new Error(`Server error ${res.status}`);
-        const data: PaginatedResponse<SocialPostDto> = await res.json();
-        const mapped = (data.content ?? []).map(toPostCardPost);
-        setPosts((prev) => (replace ? mapped : [...prev, ...mapped]));
-        setHasMore(data.hasMore ?? false);
-        setNextCursor(data.nextCursor ?? null);
+
+        const mapped = mergedData
+          .map(toPostCardPost)
+          // Simple client-side descending sort by ID (newest first)
+          .sort((a, b) => b.id - a.id);
+
+        setPosts((prev) => {
+          // Keep unique IDs
+          const combined = replace ? mapped : [...prev, ...mapped];
+          const unique = Array.from(new Map(combined.map((item) => [item.id + "-" + item.variant, item])).values());
+          return unique;
+        });
+
+        setHasMore(anyHasMore);
+        setNextCursor(newCursor);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load feed");
         setHasMore(false);
@@ -144,8 +183,8 @@ function useFeed(tab: FeedTab) {
   );
 
   useEffect(() => {
-    // [UI_DEV_MOCK] Keep mock data visible for now
-  }, [tab]);
+    fetchPage(null, true);
+  }, [tab, fetchPage]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore && !fatalError) fetchPage(nextCursor, false);
@@ -162,7 +201,15 @@ function useFeed(tab: FeedTab) {
     );
   }, []);
 
-  return { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost };
+  const prependPost = useCallback((rawPost: any) => {
+    const mapped = toPostCardPost(rawPost);
+    setPosts((prev) => {
+      const combined = [mapped, ...prev] as AnyPost[];
+      return Array.from(new Map(combined.map((item) => [item.id + "-" + item.variant, item])).values());
+    });
+  }, []);
+
+  return { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost };
 }
 
 function InfiniteScrollTrigger({ onIntersect }: { onIntersect: () => void }) {
@@ -182,10 +229,11 @@ function InfiniteScrollTrigger({ onIntersect }: { onIntersect: () => void }) {
   return <div ref={ref} className="h-4" />;
 }
 
-const SOURCE_TABS: { key: "all" | "location" | "following"; label: string }[] = [
-  { key: "all", label: "All" },
+const SOURCE_TABS: { key: "all" | "location" | "following" | "official"; label: string }[] = [
+  { key: "all", label: "For You" },
   { key: "location", label: "Location" },
   { key: "following", label: "Following" },
+  { key: "official", label: "Official" },
 ];
 
 const SORT_TABS: { key: "hot" | "new" | "top"; label: string; icon: any }[] = [
@@ -195,9 +243,8 @@ const SORT_TABS: { key: "hot" | "new" | "top"; label: string; icon: any }[] = [
 ];
 
 const Home = () => {
-  const [sourceTab, setSourceTab] = useState<"all" | "location" | "following">("all");
+  const [sourceTab, setSourceTab] = useState<"all" | "location" | "following" | "official">("all");
   const [sortTab, setSortTab] = useState<"hot" | "new" | "top">("hot");
-  const [pincode, setPincode] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
   
@@ -207,7 +254,7 @@ const Home = () => {
     return sourceTab;
   };
 
-  const { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost } =
+  const { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost } =
     useFeed(getBackendTab());
 
   const handleLike = useCallback((postId: number, liked: boolean) => {
@@ -228,6 +275,22 @@ const Home = () => {
     window.location.href = `/post/${postId}`;
   }, []);
 
+  useEffect(() => {
+    const onPostCreated = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const newPostData = customEvent.detail?.post;
+      if (newPostData) {
+        // Immediately prepend the new post to the feed without a full refetch
+        prependPost(newPostData);
+      } else {
+        // No post data in event, fall back to full refetch
+        retry();
+      }
+    };
+    window.addEventListener("postCreated", onPostCreated);
+    return () => window.removeEventListener("postCreated", onPostCreated);
+  }, [retry, prependPost]);
+
   return (
     <div className="space-y-4">
       <div className="sticky top-2 z-30">
@@ -239,7 +302,7 @@ const Home = () => {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-sm font-bold ${
-                showFilters ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-base-200 border-base-300 text-base-content/70"
+                showFilters ? "bg-blue-700 text-white border-blue-700 shadow-md" : "bg-base-200 border-base-300 text-base-content/70"
               }`}
             >
               <SlidersHorizontal size={16} />
@@ -264,7 +327,7 @@ const Home = () => {
                         onClick={() => setSourceTab(t.key)}
                         className={`flex-1 lg:flex-none rounded-lg px-4 py-1.5 text-sm font-bold transition-all whitespace-nowrap ${
                           sourceTab === t.key 
-                            ? "bg-blue-600 text-white shadow-md" 
+                            ? "bg-blue-700 text-white shadow-md" 
                             : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
                         }`}
                       >
@@ -277,7 +340,7 @@ const Home = () => {
                   <button
                     onClick={() => setShowSort(!showSort)}
                     className={`lg:hidden flex items-center justify-center p-2 h-[38px] w-[38px] rounded-xl border transition-all ${
-                      showSort ? "bg-blue-100 border-blue-300 text-blue-600" : "bg-base-200 border-base-300 text-base-content/60"
+                      showSort ? "bg-blue-100 border-blue-300 text-blue-700" : "bg-base-200 border-base-300 text-base-content/60"
                     }`}
                   >
                     <Clock size={18} />
@@ -285,17 +348,7 @@ const Home = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4 lg:flex-1 lg:justify-end">
-                  {/* Center: Pincode Input */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-base-100 border border-base-300 rounded-xl focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-                    <MapPin size={18} className="text-base-content/40" />
-                    <input
-                      type="text"
-                      placeholder="Pincode"
-                      value={pincode}
-                      onChange={(e) => setPincode(e.target.value)}
-                      className="bg-transparent text-sm w-full lg:w-24 outline-none placeholder:text-base-content/30 font-medium"
-                    />
-                  </div>
+
 
                   {/* Right: Sort Tabs (Desktop always, Mobile toggled) */}
                   <AnimatePresence>
@@ -313,7 +366,7 @@ const Home = () => {
                               onClick={() => { setSortTab(t.key); if (window.innerWidth < 1024) setShowSort(false); }}
                               className={`flex flex-1 lg:flex-none items-center justify-center gap-2 rounded-lg px-4 py-1.5 text-sm font-bold transition-all ${
                                 sortTab === t.key 
-                                  ? "bg-blue-600 text-white shadow-md" 
+                                  ? "bg-blue-700 text-white shadow-md" 
                                   : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
                               }`}
                             >

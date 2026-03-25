@@ -196,7 +196,7 @@ type CurrentUserInfo = {
 function ActionBtn({
   onClick,
   active = false,
-  activeClass = "bg-primary/15 text-primary",
+  activeClass = "bg-blue-700/15 text-blue-700",
   disabled = false,
   children,
 }: {
@@ -514,7 +514,7 @@ function PollCard({
   return (
     <div className="rounded-xl bg-base-200 p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
           <BarChart2 size={13} /> Poll
         </div>
         <span className="text-xs opacity-50 shrink-0">{timeAgo(post.createdAt)}</span>
@@ -532,13 +532,13 @@ function PollCard({
               onClick={() => toggle(opt.id)}
               disabled={!canVote}
               className={`relative w-full overflow-hidden rounded-lg border text-left transition-colors
-                ${isSelected && !hasVoted ? "border-primary" : isVotedFor ? "border-primary/60" : "border-base-300"}
-                ${canVote ? "cursor-pointer hover:border-primary/50" : "cursor-default"}`}
+                ${isSelected && !hasVoted ? "border-blue-700" : isVotedFor ? "border-blue-700/60" : "border-base-300"}
+                ${canVote ? "cursor-pointer hover:border-blue-700/50" : "cursor-default"}`}
             >
               {showResults && (
                 <div
                   className={`absolute left-0 top-0 h-full transition-all duration-500
-                    ${isVotedFor ? "bg-primary/25" : "bg-base-300/50"}`}
+                    ${isVotedFor ? "bg-blue-700/25" : "bg-base-300/50"}`}
                   style={{ width: `${opt.percentage}%` }}
                 />
               )}
@@ -547,7 +547,7 @@ function PollCard({
                   {canVote && (
                     <span
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2
-                        ${isSelected ? "border-primary bg-primary" : "border-base-content/30"}`}
+                        ${isSelected ? "border-blue-700 bg-blue-700" : "border-base-content/30"}`}
                     >
                       {isSelected && (
                         <span className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -557,7 +557,7 @@ function PollCard({
                   {opt.optionText}
                 </span>
                 {showResults && (
-                  <span className={`font-semibold ${isVotedFor ? "text-primary" : "opacity-60"}`}>
+                  <span className={`font-semibold ${isVotedFor ? "text-blue-700" : "opacity-60"}`}>
                     {opt.percentage}%
                   </span>
                 )}
@@ -568,7 +568,7 @@ function PollCard({
       </div>
 
       {canVote && selected.length > 0 && (
-        <button onClick={submitVote} disabled={voting} className="btn btn-primary btn-sm w-full">
+        <button onClick={submitVote} disabled={voting} className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm w-full">
           {voting ? "Submitting…" : "Vote"}
         </button>
       )}
@@ -680,7 +680,7 @@ function SocialPostCard({
       {post.hashtags && post.hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {post.hashtags.map((tag) => (
-            <span key={tag} className="text-xs text-primary opacity-80">{tag}</span>
+            <span key={tag} className="text-xs text-blue-700 opacity-80">{tag}</span>
           ))}
         </div>
       )}
@@ -727,7 +727,7 @@ function ActivityIcon({ type }: { type: ActivityItem["icon"] }) {
     );
   if (type === "comment")
     return (
-      <div className={`${cls} bg-blue-100 text-blue-600`}>
+      <div className={`${cls} bg-blue-100 text-blue-700`}>
         <MessageSquare size={13} />
       </div>
     );

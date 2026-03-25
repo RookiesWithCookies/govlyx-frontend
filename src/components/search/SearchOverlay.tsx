@@ -190,8 +190,8 @@ function CommunityCard({ r }: { r: NormResult }) {
             className="h-10 w-10 rounded-full object-cover shrink-0"
           />
         ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <Users size={18} className="text-primary" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-700/10">
+            <Users size={18} className="text-blue-700" />
           </div>
         )}
         <div className="min-w-0">

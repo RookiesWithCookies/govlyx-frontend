@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { FiSearch } from "react-icons/fi";
+import { HiOutlineArrowRight, HiOutlineArrowLeft } from "react-icons/hi";
 import { useNavigate, useParams } from "react-router-dom";
 import { 
   Building2, Construction, GraduationCap, Stethoscope, Leaf, 
@@ -8,7 +10,7 @@ import {
   X, Crown, Shield, User, VolumeX, Volume2, Ban, Trash2, 
   Save, Archive, Pencil, Heart, MessageSquare, Calendar, 
   Tag, MapPin, Rocket, PartyPopper, Plus, ChevronLeft, 
-  Search, XCircle, Home, Link
+  XCircle, Home, Link, Eye, Image as ImageIcon, RefreshCw
 } from "lucide-react";
 import CommunityCard from "../components/community/CommunityCard";
 import CommunityHeader from "../components/community/CommunityHeader";
@@ -79,6 +81,7 @@ interface CreateForm {
   category: string;
   tags: string;
   privacy: "PUBLIC" | "PRIVATE" | "SECRET";
+  avatarUrl: string;
   locationRestricted: boolean;
   allowMemberPosts: boolean;
   requirePostApproval: boolean;
@@ -212,7 +215,7 @@ function highlight(text: string, query: string): React.ReactNode {
   const parts = text.split(new RegExp(`(${esc})`, "gi"));
   return parts.map((p, i) =>
     p.toLowerCase() === query.toLowerCase()
-      ? <mark key={i} className="bg-primary/25 text-primary rounded px-0.5">{p}</mark>
+      ? <mark key={i} className="bg-blue-700/25 text-blue-700 rounded px-0.5">{p}</mark>
       : p
   );
 }
@@ -220,8 +223,8 @@ function highlight(text: string, query: string): React.ReactNode {
 function avatar(name: string, image?: string | null) {
   if (image) return <img src={image} className="w-8 h-8 rounded-full object-cover" alt="" />;
   return (
-    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-      {(name || "?")[0].toUpperCase()}
+    <div className="w-8 h-8 rounded-full overflow-hidden border border-base-300 bg-base-200 shrink-0">
+      <img src={`https://robohash.org/${encodeURIComponent(name || "?")}`} alt="Avatar" className="w-full h-full object-cover" />
     </div>
   );
 }
@@ -418,7 +421,7 @@ function InviteTab({
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 btn btn-xs rounded-lg transition-all ${mode === m ? "btn-primary" : "btn-ghost"}`}
+            className={`flex-1 btn btn-xs rounded-lg transition-all ${mode === m ? "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800" : "btn-ghost"}`}
           >
             {m === "send" ? <><Mail size={12} className="mr-1" /> Send Invite</> : <><ClipboardCheck size={12} className="mr-1" /> Pending Invites</>}
           </button>
@@ -479,7 +482,7 @@ function InviteTab({
                 </label>
 
                 {selectedUser ? (
-                  <div className="flex items-center gap-3 rounded-xl border border-primary bg-primary/10 p-3">
+                  <div className="flex items-center gap-3 rounded-xl border border-blue-700 bg-blue-700/10 p-3">
                     {avatar(selectedUser.username, selectedUser.profileImage)}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold">@{selectedUser.username}</p>
@@ -495,11 +498,7 @@ function InviteTab({
                 ) : (
                   <div className="relative">
                     <div className="relative">
-                      <svg className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none"
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round"
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
+                      <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" size={14} />
                       <input
                         type="text"
                         placeholder="Search username…"
@@ -559,7 +558,7 @@ function InviteTab({
               </div>
 
               <button
-                className="btn btn-primary w-full gap-2"
+                className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-full gap-2"
                 disabled={!selectedUser || sending}
                 onClick={handleSendInvite}
               >
@@ -571,7 +570,7 @@ function InviteTab({
               {/* Shareable link generator */}
               <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <span className="text-xl text-primary"><Link size={20} /></span>
+                  <span className="text-xl text-blue-700"><Link size={20} /></span>
                   <div>
                     <p className="text-sm font-semibold">Generate Shareable Link</p>
                     <p className="text-xs opacity-60 mt-0.5">
@@ -587,7 +586,7 @@ function InviteTab({
                         {genResult.inviteLink}
                       </code>
                       <button
-                        className={`btn btn-xs shrink-0 ${copiedGen ? "btn-success" : "btn-primary"}`}
+                        className={`btn btn-xs shrink-0 ${copiedGen ? "btn-success" : "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800"}`}
                         onClick={() => copyToClipboard(genResult!.inviteLink, setCopiedGen)}
                       >
                         {copiedGen ? "✓ Copied" : "Copy"}
@@ -651,7 +650,7 @@ function InviteTab({
           ))}
           {hasMore && !listLoading && (
             <button
-              className="w-full py-2 text-sm text-primary hover:opacity-70"
+              className="w-full py-2 text-sm text-blue-700 hover:opacity-70"
               onClick={() => loadInvites(cursor, false)}
             >
               Load more ↓
@@ -810,7 +809,7 @@ export function AcceptInvitePage() {
 
         {/* Gradient header */}
         <div className="h-24 bg-gradient-to-br from-primary/30 via-primary/10 to-base-200 flex items-center justify-center">
-          <Home size={48} className="text-primary" />
+          <Home size={48} className="text-blue-700" />
         </div>
 
         <div className="px-6 pb-6 pt-4 space-y-4">
@@ -873,7 +872,7 @@ export function AcceptInvitePage() {
               )}
 
               <button
-                className="btn btn-primary w-full"
+                className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-full"
                 onClick={handleAccept}
               >
                 <Rocket size={18} className="mr-2" /> Accept &amp; Join Community
@@ -896,7 +895,7 @@ export function AcceptInvitePage() {
           {/* Success */}
           {(status === "success" || status === "already") && accepted && (
             <div className="text-center space-y-3 py-4">
-              <div className="flex justify-center text-primary"><PartyPopper size={48} /></div>
+              <div className="flex justify-center text-blue-700"><PartyPopper size={48} /></div>
               <h2 className="font-bold text-lg">
                 {status === "already" ? "Already a member!" : "You're in!"}
               </h2>
@@ -904,7 +903,7 @@ export function AcceptInvitePage() {
                 Welcome to <strong>{accepted.communityName}</strong>.
               </p>
               <button
-                className="btn btn-primary w-full"
+                className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-full"
                 onClick={() => navigate('/communities')}
               >
                 Open Community <ChevronLeft size={16} className="rotate-180 ml-1" />
@@ -1063,6 +1062,7 @@ function AdminPanel({
     name:                c.name,
     description:         c.description,
     privacy:             c.privacy,
+    avatarUrl:           c.avatarUrl || "",
     allowMemberPosts:    c.allowMemberPosts    ?? true,
     requirePostApproval: c.requirePostApproval ?? false,
     feedEligible:        c.feedEligible        ?? false,
@@ -1184,7 +1184,7 @@ function AdminPanel({
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`relative flex-1 btn btn-xs rounded-lg gap-1 transition-all ${
-                  tab === t.key ? "btn-primary" : "btn-ghost opacity-60 hover:opacity-100"
+                  tab === t.key ? "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800" : "btn-ghost opacity-60 hover:opacity-100"
                 }`}
               >
                 <span>{t.icon}</span>
@@ -1236,7 +1236,7 @@ function AdminPanel({
                 </div>
               ))}
               {reqHasMore && !reqLoading && (
-                <button className="w-full py-2 text-sm text-primary" onClick={() => loadRequests(reqCursor, false)}>
+                <button className="w-full py-2 text-sm text-blue-700" onClick={() => loadRequests(reqCursor, false)}>
                   Load more ↓
                 </button>
               )}
@@ -1247,10 +1247,7 @@ function AdminPanel({
           {tab === "members" && (
             <div className="p-4 space-y-3">
               <div className="relative">
-                <svg className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" size={14} />
                 <input type="text" placeholder="Filter members…" className="input input-bordered input-sm w-full pl-8"
                   value={memSearch} onChange={e => setMemSearch(e.target.value)} />
               </div>
@@ -1293,7 +1290,7 @@ function AdminPanel({
                 </div>
               ))}
               {memHasMore && !memLoading && (
-                <button className="w-full py-2 text-sm text-primary" onClick={() => loadMembers(memCursor, false)}>
+                <button className="w-full py-2 text-sm text-blue-700" onClick={() => loadMembers(memCursor, false)}>
                   Load more ↓
                 </button>
               )}
@@ -1324,6 +1321,13 @@ function AdminPanel({
                   onChange={e => setSettingsForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
+                <label className="block text-sm font-semibold mb-1">Image URL</label>
+                <input className="input input-bordered w-full" placeholder="https://..."
+                  value={settingsForm.avatarUrl}
+                  onChange={e => setSettingsForm(f => ({ ...f, avatarUrl: e.target.value }))} />
+                <p className="text-xs opacity-40 mt-1">Leave blank to use an auto-generated robot avatar.</p>
+              </div>
+              <div>
                 <label className="block text-sm font-semibold mb-1">Description</label>
                 <textarea className="textarea textarea-bordered w-full resize-none" rows={3} maxLength={500}
                   value={settingsForm.description}
@@ -1335,15 +1339,15 @@ function AdminPanel({
                   {(["PUBLIC","PRIVATE","SECRET"] as const).map(p => (
                     <button key={p} type="button"
                       onClick={() => setSettingsForm(f => ({ ...f, privacy: p }))}
-                      className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${settingsForm.privacy === p ? "border-primary bg-primary/10" : "border-base-300 hover:border-base-400"}`}>
+                      className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${settingsForm.privacy === p ? "border-blue-700 bg-blue-700/10" : "border-base-300 hover:border-base-400"}`}>
                       <span className="text-xl">{PRIV_ICON[p]}</span>
                       <div className="flex-1">
-                        <p className={`text-sm font-semibold ${settingsForm.privacy === p ? "text-primary" : ""}`}>
+                        <p className={`text-sm font-semibold ${settingsForm.privacy === p ? "text-blue-700" : ""}`}>
                           {p.charAt(0)+p.slice(1).toLowerCase()}
                         </p>
                         <p className="text-xs opacity-50">{PRIV_DESC[p]}</p>
                       </div>
-                      {settingsForm.privacy === p && <span className="text-primary">✓</span>}
+                      {settingsForm.privacy === p && <span className="text-blue-700">✓</span>}
                     </button>
                   ))}
                 </div>
@@ -1366,7 +1370,7 @@ function AdminPanel({
                   </label>
                 ))}
               </div>
-              <button className="btn btn-primary w-full" disabled={settingsBusy} onClick={saveSettings}>
+              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-full" disabled={settingsBusy} onClick={saveSettings}>
                 {settingsBusy ? <><Spin xs /> Saving…</> : <><Save size={18} className="mr-2" /> Save Changes</>}
               </button>
               <div className="rounded-xl border border-error/30 bg-error/5 p-4 space-y-2 mt-4">
@@ -1394,7 +1398,7 @@ function AdminPanel({
                 <>
                   <div className="rounded-2xl border border-base-300 bg-gradient-to-br from-primary/10 to-base-200 p-5 text-center">
                     <p className="text-xs opacity-50 uppercase tracking-widest mb-1">Health Score</p>
-                    <p className="text-5xl font-black text-primary">
+                    <p className="text-5xl font-black text-blue-700">
                       {insights.healthScore != null ? Math.round(insights.healthScore) : "—"}
                     </p>
                     {insights.healthTier && <p className="text-sm font-semibold mt-1 opacity-70">{insights.healthTier}</p>}
@@ -1423,14 +1427,14 @@ function AdminPanel({
                             <span className="font-semibold">{Math.round(val)}</span>
                           </div>
                           <div className="w-full bg-base-300 rounded-full h-1.5">
-                            <div className="bg-primary h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, val)}%` }} />
+                            <div className="bg-blue-700 h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, val)}%` }} />
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                   <button className="btn btn-outline btn-sm w-full gap-2" disabled={recalcBusy} onClick={triggerRecalc}>
-                    {recalcBusy ? <><Spin xs /> Recalculating…</> : "🔄 Recalculate Health Score"}
+                    {recalcBusy ? <><Spin xs /> Recalculating…</> : <><RefreshCw size={14} /> Recalculate Health Score</>}
                   </button>
                 </>
               )}
@@ -1449,7 +1453,7 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<CreateForm>({
     name: "", description: "", category: "OTHER", tags: "",
-    privacy: "PUBLIC", locationRestricted: false,
+    privacy: "PUBLIC", locationRestricted: false, avatarUrl: "",
     allowMemberPosts: true, requirePostApproval: false,
   });
   const [busy, setBusy] = useState(false);
@@ -1464,6 +1468,7 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
         body: JSON.stringify({
           name: form.name.trim(), description: form.description.trim(),
           category: form.category, tags: form.tags.trim(), privacy: form.privacy,
+          avatarUrl: form.avatarUrl.trim() || null,
           locationRestricted: form.locationRestricted,
           allowMemberPosts: form.allowMemberPosts, requirePostApproval: form.requirePostApproval,
         }),
@@ -1485,10 +1490,10 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
         <div className="flex items-center justify-between px-5 py-4 border-b border-base-300 shrink-0">
           <div>
             <h2 className="font-bold text-base flex items-center gap-2">
-              <Plus size={18} className="text-primary" /> Create Community
+              <Plus size={18} className="text-blue-700" /> Create Community
             </h2>
             <div className="flex gap-1 mt-1.5">
-              {[1,2].map(s => <div key={s} className={`h-1 w-8 rounded-full transition-all ${step >= s ? "bg-primary" : "bg-base-300"}`} />)}
+              {[1,2].map(s => <div key={s} className={`h-1 w-8 rounded-full transition-all ${step >= s ? "bg-blue-700" : "bg-base-300"}`} />)}
             </div>
           </div>
           <button onClick={onClose} className="btn btn-ghost btn-circle btn-sm"><X size={18} /></button>
@@ -1504,6 +1509,12 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
                 <p className="text-xs opacity-40 mt-1">{form.name.length}/60 · min 3</p>
               </div>
               <div>
+                <label className="block text-sm font-semibold mb-1">Image URL <span className="opacity-40 font-normal">(optional)</span></label>
+                <input className="input input-bordered w-full" placeholder="https://..."
+                  value={form.avatarUrl} onChange={e => setForm(f => ({ ...f, avatarUrl: e.target.value }))} />
+                <p className="text-xs opacity-50 mt-1 text-blue-700">If left blank, a random robot avatar will be assigned.</p>
+              </div>
+              <div>
                 <label className="block text-sm font-semibold mb-1">Description <span className="text-error">*</span></label>
                 <textarea className="textarea textarea-bordered w-full resize-none" rows={3} maxLength={500}
                   placeholder="What's this community about?"
@@ -1515,7 +1526,7 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
                 <div className="grid grid-cols-3 gap-1.5">
                   {CATS.map(cat => (
                     <button key={cat} type="button" onClick={() => setForm(f => ({ ...f, category: cat }))}
-                      className={`rounded-xl border py-2 px-1 text-center text-xs transition-all ${form.category === cat ? "border-primary bg-primary/15 text-primary font-semibold" : "border-base-300 hover:border-base-400 opacity-70"}`}>
+                      className={`rounded-xl border py-2 px-1 text-center text-xs transition-all ${form.category === cat ? "border-blue-700 bg-blue-700/15 text-blue-700 font-semibold" : "border-base-300 hover:border-base-400 opacity-70"}`}>
                       <div className="text-lg mb-0.5">{CAT_ICON[cat]}</div>
                       <div className="leading-tight">{cat.replace(/_/g," ")}</div>
                     </button>
@@ -1531,13 +1542,13 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
                 <div className="space-y-2">
                   {(["PUBLIC","PRIVATE","SECRET"] as const).map(p => (
                     <button key={p} type="button" onClick={() => setForm(f => ({ ...f, privacy: p }))}
-                      className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${form.privacy === p ? "border-primary bg-primary/10" : "border-base-300 hover:border-base-400"}`}>
+                      className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${form.privacy === p ? "border-blue-700 bg-blue-700/10" : "border-base-300 hover:border-base-400"}`}>
                       <span className="text-2xl">{PRIV_ICON[p]}</span>
                       <div className="flex-1">
-                        <p className={`text-sm font-semibold ${form.privacy === p ? "text-primary" : ""}`}>{p.charAt(0)+p.slice(1).toLowerCase()}</p>
+                        <p className={`text-sm font-semibold ${form.privacy === p ? "text-blue-700" : ""}`}>{p.charAt(0)+p.slice(1).toLowerCase()}</p>
                         <p className="text-xs opacity-50">{PRIV_DESC[p]}</p>
                       </div>
-                      {form.privacy === p && <span className="text-primary font-bold">✓</span>}
+                      {form.privacy === p && <span className="text-blue-700 font-bold">✓</span>}
                     </button>
                   ))}
                 </div>
@@ -1566,10 +1577,10 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
           )}
         </div>
         <div className="shrink-0 px-5 py-4 border-t border-base-300 flex gap-3">
-          {step === 2 && <button className="btn btn-ghost btn-outline flex-1" onClick={() => setStep(1)} disabled={busy}>← Back</button>}
+          {step === 2 && <button className="btn btn-ghost btn-outline flex-1 gap-1" onClick={() => setStep(1)} disabled={busy}><HiOutlineArrowLeft size={14} /> Back</button>}
           {step === 1
-            ? <button className="btn btn-primary flex-1" disabled={!canNext} onClick={() => setStep(2)}>Next →</button>
-            : <button className="btn btn-primary flex-1" disabled={busy} onClick={submit}>{busy ? <><Spin xs /> Creating…</> : "🚀 Create Community"}</button>
+            ? <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 flex-1 gap-1" disabled={!canNext} onClick={() => setStep(2)}>Next <HiOutlineArrowRight size={14} /></button>
+            : <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 flex-1" disabled={busy} onClick={submit}>{busy ? <><Spin xs /> Creating…</> : "🚀 Create Community"}</button>
           }
         </div>
       </div>
@@ -1673,7 +1684,7 @@ function DetailPanel({
           <button className="btn btn-ghost btn-sm gap-1" onClick={onClose}>← Back</button>
           {!c.isOwner
             ? <button
-                className={`btn btn-sm ${c.isMember ? "btn-ghost btn-outline" : c.hasPendingRequest ? "btn-warning btn-outline" : isSecret ? "btn-disabled" : "btn-primary"}`}
+                className={`btn btn-sm ${c.isMember ? "btn-ghost btn-outline" : c.hasPendingRequest ? "btn-warning btn-outline" : isSecret ? "btn-disabled" : "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800"}`}
                 onClick={toggleMembership} disabled={acting || isSecret}>
                 {acting ? <Spin xs /> : c.isMember ? "✓ Joined · Leave" : c.hasPendingRequest ? "⏳ Pending · Cancel" : isSecret ? "Invite Only" : c.privacy === "PRIVATE" ? "Request to Join" : "Join Community"}
               </button>
@@ -1683,7 +1694,7 @@ function DetailPanel({
 
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
-            <CommunityHeader name={c.name} description={c.description} members={c.memberCount} />
+            <CommunityHeader community={c} acting={acting} onJoinClick={toggleMembership} />
             <CommunityTabs active={tab} onChange={setTab} />
 
             {tab === "posts" && (
@@ -1699,7 +1710,7 @@ function DetailPanel({
                           <span className="text-xs opacity-40">{postText.length}/2000</span>
                           <div className="flex gap-2">
                             <button className="btn btn-ghost btn-sm" onClick={() => { setShowCompose(false); setPostText(""); }}>Cancel</button>
-                            <button className="btn btn-primary btn-sm" disabled={!postText.trim() || posting} onClick={submitPost}>{posting ? <Spin xs /> : "Post"}</button>
+                            <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm" disabled={!postText.trim() || posting} onClick={submitPost}>{posting ? <Spin xs /> : "Post"}</button>
                           </div>
                         </div>
                       </div>
@@ -1714,8 +1725,8 @@ function DetailPanel({
                 {posts.map(post => (
                   <div key={post.id} className="rounded-xl border border-base-300 bg-base-200 p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                        {(post.authorName || "U")[0].toUpperCase()}
+                      <div className="w-8 h-8 rounded-full overflow-hidden border border-base-300 bg-base-200 shrink-0">
+                        <img src={`https://robohash.org/${encodeURIComponent(post.authorName || "Unknown")}`} alt="Avatar" className="w-full h-full object-cover" />
                       </div>
                       <div>
                         <p className="text-sm font-semibold">{post.authorName || "Unknown"}</p>
@@ -1730,13 +1741,21 @@ function DetailPanel({
                   </div>
                 ))}
                 {hasMore && !loading && (
-                  <button className="w-full py-2 text-sm text-primary hover:opacity-70" onClick={() => loadPosts(cursor, false)}>Load more ↓</button>
+                  <button className="w-full py-2 text-sm text-blue-700 hover:opacity-70" onClick={() => loadPosts(cursor, false)}>Load more ↓</button>
                 )}
               </div>
             )}
 
             {tab === "about" && (
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Detailed Description */}
+                <div className="rounded-xl border border-base-300 bg-base-200 p-5">
+                  <h3 className="font-semibold mb-3 text-lg">About this community</h3>
+                  <p className="text-sm opacity-80 whitespace-pre-line leading-relaxed">
+                    {c.description || "No detailed description provided."}
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   {([
                     ["Members", c.memberCount.toLocaleString(), <Users size={14} />],
@@ -1752,6 +1771,20 @@ function DetailPanel({
                     </div>
                   ))}
                 </div>
+
+                {/* Images Section */}
+                <div className="rounded-xl border border-base-300 bg-base-200 p-5">
+                  <h3 className="font-semibold mb-3 text-lg">Media & Data</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <div key={i} className="aspect-square rounded-xl bg-base-300/50 flex flex-col items-center justify-center overflow-hidden border border-base-300 text-base-content hover:bg-base-300 transition-colors cursor-pointer">
+                        <ImageIcon size={24} className="mb-2 opacity-30" />
+                        <span className="text-xs opacity-40 font-semibold uppercase tracking-wider">Image {i}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <CommunitySidebar />
               </div>
             )}
@@ -1910,7 +1943,7 @@ const Community = () => {
           <h1 className="text-xl font-semibold">Communities</h1>
           <p className="text-sm opacity-70">Discover and join communities based on your interests.</p>
         </div>
-        <button className="btn btn-primary btn-sm gap-2 shrink-0" onClick={() => setShowCreate(true)}>
+        <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm gap-2 shrink-0" onClick={() => setShowCreate(true)}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
@@ -1922,10 +1955,7 @@ const Community = () => {
       <div className="relative">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" size={16} />
             <input ref={inputRef} type="text" placeholder="Search communities..."
               className="input input-bordered w-full pl-10 pr-8" value={query}
               onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
@@ -1941,7 +1971,7 @@ const Community = () => {
                 {suggestions.map(c => (
                   <button key={c.id} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-base-200 text-left transition-colors"
                     onMouseDown={e => { e.preventDefault(); commitSearch(c.name); }}>
-                    <span className="text-primary shrink-0"><Home size={18} /></span>
+                    <span className="text-blue-700 shrink-0"><Home size={18} /></span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{highlight(c.name, query)}</p>
                       {c.description && <p className="text-xs opacity-50 truncate">{c.description}</p>}
@@ -1952,7 +1982,7 @@ const Community = () => {
               </div>
             )}
           </div>
-          <button className="btn btn-primary px-4" disabled={!query.trim()} onClick={() => commitSearch(query)}>Search</button>
+          <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 px-4" disabled={!query.trim()} onClick={() => commitSearch(query)}>Search</button>
         </div>
       </div>
 
@@ -1961,7 +1991,7 @@ const Community = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setView(v => v === "joined" ? "default" : "joined")}
-            className={`btn btn-sm rounded-full gap-1.5 transition-all ${view === "joined" ? "btn-primary" : "btn-ghost border border-base-300 hover:border-primary/50"}`}
+            className={`btn btn-sm rounded-full gap-1.5 transition-all ${view === "joined" ? "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800" : "btn-ghost border border-base-300 hover:border-blue-700/50"}`}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-5-3.87M9 20H4v-2a4 4 0 015-3.87m6-4a4 4 0 11-8 0 4 4 0 018 0zm6 0a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -2010,19 +2040,19 @@ const Community = () => {
             <div className="text-center py-12 opacity-50 space-y-3">
               <div className="text-4xl">🔍</div>
               <p className="text-sm">No communities found for "{committed}"</p>
-              <button className="btn btn-primary btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create "{committed}"</button>
+              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create "{committed}"</button>
             </div>
           )}
           {!searchLoading && searchResults.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
-              {searchResults.map(c => (
+              {searchResults.map((c: any) => (
                 <CommunityCard key={c.id} slug={c.slug} name={c.name} description={c.description}
-                  members={c.memberCount} onClick={() => setSelected(c)} />
+                  members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} onClick={() => setSelected(c)} />
               ))}
             </div>
           )}
           {searchHasMore && !searchLoading && (
-            <button className="w-full py-2 text-sm text-primary hover:opacity-70 transition-opacity"
+            <button className="w-full py-2 text-sm text-blue-700 hover:opacity-70 transition-opacity"
               disabled={searchLoadingMore} onClick={() => doSearch(committed, searchCursor, false)}>
               {searchLoadingMore ? <Spin xs /> : "Load more ↓"}
             </button>
@@ -2057,51 +2087,72 @@ const Community = () => {
               {/* Owned (created by you) */}
               {(view === "default" || view === "owned") && ownedList.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-widest opacity-40">
-                    ⚙️ Created by you · {ownedList.length}
+                  <p className="text-xs font-semibold uppercase tracking-widest opacity-40 flex items-center gap-1.5">
+                    <Settings size={14} /> Created by you · {ownedList.length}
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {ownedList.map(c => (
-                      <div key={c.id} className="rounded-2xl border border-base-300 bg-base-100 overflow-hidden hover:border-primary/40 hover:shadow-md transition-all group">
+                    {ownedList.map(c => {
+                      const ownedImgSrc = c.avatarUrl || `https://robohash.org/${encodeURIComponent(c.name)}`;
+                      return (
+                      <div key={c.id} className="group relative rounded-2xl border border-base-300 bg-base-100 overflow-hidden transition-all duration-200 hover:border-blue-700/40 hover:shadow-[0_4px_24px_-4px_rgba(29,78,216,0.18)] hover:scale-[1.015] active:scale-[0.98]" style={{ transform: "translateZ(0)" }}>
+
                         <div className="p-4 cursor-pointer" onClick={() => setSelected({ ...c, isMember: true })}>
-                          <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 group-hover:bg-primary/20 transition-colors"><Home size={20} /></div>
+                          <div className="flex items-center gap-3.5">
+                            {/* Circular avatar */}
+                            <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden ring-2 ring-base-300 group-hover:ring-blue-700/40 transition-all duration-200 shadow-sm group-hover:shadow-md">
+                              <img
+                                src={ownedImgSrc}
+                                alt={c.name}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                onError={e => { (e.target as HTMLImageElement).src = `https://robohash.org/${encodeURIComponent(c.name)}`; }}
+                              />
+                            </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{c.name}</p>
-                                <span className="badge badge-xs badge-warning shrink-0">⚙️ Owner</span>
+                              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                <p className="font-bold text-sm truncate">{c.name}</p>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
+                                  <Settings size={8} /> Owner
+                                </span>
                                 {c.privacy !== "PUBLIC" && (
-                                  <span className="badge badge-xs badge-ghost shrink-0">
-                                    {c.privacy === "SECRET" ? "🕵️ Secret" : "🔒 Private"}
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-base-200 text-base-content/60 border border-base-300">
+                                    {c.privacy === "SECRET" ? <><EyeOff size={9} /> Secret</> : <><Lock size={9} /> Private</>}
                                   </span>
                                 )}
                               </div>
-                              {c.description && <p className="text-xs opacity-60 line-clamp-2 mt-0.5">{c.description}</p>}
-                              <p className="text-xs opacity-40 mt-1.5 flex items-center gap-1"><Users size={12} /> {c.memberCount.toLocaleString()} members</p>
+                              {c.description && <p className="text-xs text-base-content/60 line-clamp-1">{c.description}</p>}
+                              <p className="text-[11px] font-medium text-base-content/45 mt-1 flex items-center gap-1">
+                                <Users size={11} className="text-blue-700/60" /> {c.memberCount.toLocaleString()} members
+                              </p>
                             </div>
                           </div>
                         </div>
+
+                        {/* Action buttons */}
                         <div className="border-t border-base-200 grid grid-cols-2 divide-x divide-base-200">
-                          <button className="py-2.5 text-xs font-medium text-center hover:bg-base-200 transition-colors"
-                            onClick={() => setSelected({ ...c, isMember: true })}>
-                            👁️ View
+                          <button
+                            className="py-2.5 text-xs font-semibold text-base-content/60 hover:text-base-content hover:bg-base-200 transition-all duration-200 flex items-center justify-center gap-1.5"
+                            onClick={() => setSelected({ ...c, isMember: true })}
+                          >
+                            <Eye size={13} /> View
                           </button>
-                          <button className="py-2.5 text-xs font-medium text-center hover:bg-warning/10 text-warning transition-colors"
-                            onClick={e => { e.stopPropagation(); setAdminTarget(c); }}>
-                            ⚙️ Manage
+                          <button
+                            className="py-2.5 text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 transition-all duration-200 flex items-center justify-center gap-1.5"
+                            onClick={e => { e.stopPropagation(); setAdminTarget(c); }}
+                          >
+                            <Settings size={13} /> Manage
                           </button>
                         </div>
                       </div>
-                    ))}
+                    );})}
                   </div>
                 </div>
               )}
 
               {view === "owned" && ownedList.length === 0 && (
                 <div className="text-center py-14 opacity-60 space-y-3">
-                  <div className="text-5xl">⚙️</div>
+                  <div className="flex justify-center text-base-content/20"><Settings size={48} /></div>
                   <p className="font-semibold">You haven't created any communities yet</p>
-                  <button className="btn btn-primary btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create your first community</button>
+                  <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create your first community</button>
                 </div>
               )}
 
@@ -2112,7 +2163,7 @@ const Community = () => {
                   <div className="grid gap-4 sm:grid-cols-2">
                     {joinedOnly.map(c => (
                       <CommunityCard key={c.id} slug={c.slug} name={c.name} description={c.description}
-                        members={c.memberCount} onClick={() => setSelected(c)} />
+                        members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} onClick={() => setSelected(c)} />
                     ))}
                   </div>
                 </div>

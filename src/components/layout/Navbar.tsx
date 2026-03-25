@@ -19,7 +19,7 @@ import SearchOverlay from "../search/SearchOverlay";
 const Navbar = () => {
   const [openCreate, setOpenCreate] = useState(false);
   const [theme, setTheme] = useState("light");
-  const [avatarLetter, setAvatarLetter] = useState("U");
+  const [username, setUsername] = useState("User");
 
   // ── Search overlay state ───────────────────────────────────────────────────
   const [searchOpen, setSearchOpen] = useState(false);
@@ -67,9 +67,9 @@ const Navbar = () => {
       .then((body) => {
         const user = body?.data;
         const name = user?.actualUsername ?? user?.username;
-        if (name) setAvatarLetter(name.charAt(0).toUpperCase());
+        if (name) setUsername(name);
       })
-      .catch(() => setAvatarLetter("U"));
+      .catch(() => setUsername("User"));
   }, []);
 
   return (
@@ -174,11 +174,11 @@ const Navbar = () => {
               Create
             </button>
 
-            <NavLink to="/messages" className="btn btn-ghost btn-sm hover:bg-blue-700/10">
+            <NavLink to="/quick-chat" className="btn btn-ghost btn-sm hover:bg-blue-700/10">
               <MessageCircle size={18} />
             </NavLink>
 
-            <NavLink to="/notifications" className="btn btn-ghost btn-sm hover:bg-blue-700/10">
+            <NavLink to="/settings" className="btn btn-ghost btn-sm hover:bg-blue-700/10">
               <Bell size={18} />
             </NavLink>
 
@@ -191,10 +191,9 @@ const Navbar = () => {
               {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
             </button>
 
-            {/* AVATAR */}
             <NavLink to="/profile" className="avatar placeholder">
-              <div className="w-8 rounded-full bg-blue-700 text-white font-mono font-bold flex justify-center pt-1">
-                {avatarLetter}
+              <div className="w-8 rounded-full overflow-hidden bg-base-200 border border-base-300">
+                <img src={`https://robohash.org/${encodeURIComponent(username)}`} alt="Avatar" className="w-full h-full object-cover" />
               </div>
             </NavLink>
           </div>

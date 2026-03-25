@@ -15,6 +15,7 @@ import {
   AlertCircle,
   BarChart2,
 } from "lucide-react";
+import { MdCheck } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
 import CommentSection from "./CommentSection";
 import type { PostType } from "./CommentSection";
@@ -210,7 +211,7 @@ function commentPostType(variant: PostVariant): PostType {
 function ActionBtn({
   onClick,
   active = false,
-  activeClass = "bg-primary/15 text-primary",
+  activeClass = "bg-blue-700/15 text-blue-700",
   disabled = false,
   children,
 }: {
@@ -416,7 +417,7 @@ function PollCard({
       {/* Header */}
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         {post.communityId && post.communityName && (
-          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+          <span className="flex items-center gap-1 rounded-full bg-blue-700/10 px-2 py-0.5 text-xs font-semibold text-blue-700">
             <Users size={11} /> {post.communityName}
           </span>
         )}
@@ -425,7 +426,7 @@ function PollCard({
         </span>
         <span className="opacity-40">•</span>
         <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-blue-700/10 px-2 py-0.5 text-xs font-semibold text-blue-700">
           <BarChart2 size={11} /> Poll
         </span>
       </div>
@@ -445,17 +446,17 @@ function PollCard({
               className={`relative w-full overflow-hidden rounded-lg border text-left transition-colors
                 ${
                   isSelected && !hasVoted
-                    ? "border-primary"
+                    ? "border-blue-700"
                     : isVotedFor
-                    ? "border-primary/60"
+                    ? "border-blue-700/60"
                     : "border-base-300"
                 }
-                ${canVote ? "cursor-pointer hover:border-primary/50" : "cursor-default"}`}
+                ${canVote ? "cursor-pointer hover:border-blue-700/50" : "cursor-default"}`}
             >
               {showResults && (
                 <div
                   className={`absolute inset-y-0 left-0 transition-all duration-500
-                    ${isVotedFor ? "bg-primary/25" : "bg-base-300/50"}`}
+                    ${isVotedFor ? "bg-blue-700/25" : "bg-base-300/50"}`}
                   style={{ width: `${opt.percentage}%` }}
                 />
               )}
@@ -466,7 +467,7 @@ function PollCard({
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2
                         ${
                           isSelected
-                            ? "border-primary bg-primary"
+                            ? "border-blue-700 bg-blue-700"
                             : "border-base-content/30"
                         }`}
                     >
@@ -480,7 +481,7 @@ function PollCard({
                 {showResults && (
                   <span
                     className={`font-semibold ${
-                      isVotedFor ? "text-primary" : "opacity-70"
+                      isVotedFor ? "text-blue-700" : "opacity-70"
                     }`}
                   >
                     {opt.percentage}%
@@ -496,7 +497,7 @@ function PollCard({
         <button
           onClick={submitVote}
           disabled={voting}
-          className="btn btn-primary btn-sm mt-3 w-full"
+          className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm mt-3 w-full"
         >
           {voting ? "Submitting…" : "Vote"}
         </button>
@@ -511,7 +512,9 @@ function PollCard({
           </span>
         )}
         {hasVoted && !post.isExpired && (
-          <span className="text-success">✓ Voted</span>
+          <span className="text-success flex items-center gap-0.5">
+            <MdCheck size={14} /> Voted
+          </span>
         )}
       </div>
 
@@ -629,8 +632,8 @@ export default function PostCard({
     setLikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
     onLike?.(post.id, next);
     const ep = isIssue
-      ? `/api/interactions/posts/${post.id}/like`
-      : `/api/interactions/social-posts/${post.id}/like`;
+      ? `/api/posts/interactions/${post.id}/like`
+      : `/api/social-posts/interactions/${post.id}/like`;
     try {
       await apiPost(ep, {});
     } catch {
@@ -718,7 +721,7 @@ export default function PostCard({
             </span>
           )}
           {isCommunity && (
-            <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+            <span className="flex items-center gap-1 rounded-full bg-blue-700/10 px-2 py-0.5 text-xs font-semibold text-blue-700">
               <Users size={11} />
               {(post as CommunityPost).communityName}
             </span>
@@ -787,6 +790,27 @@ export default function PostCard({
         {/* Content */}
         <p className="mb-3 text-sm leading-relaxed">{post.content}</p>
 
+        {/* Media / Images */}
+        {"mediaUrls" in post && post.mediaUrls && (post.mediaUrls as string[]).length > 0 && (
+          <div className="mb-3 flex gap-2 overflow-x-auto">
+            {(post.mediaUrls as string[]).slice(0, 3).map((url, i) => (
+              <img
+                key={i}
+                src={url}
+                alt="media"
+                className="h-48 w-full rounded-xl object-cover shrink-0 max-w-[80%]"
+              />
+            ))}
+          </div>
+        )}
+        {"imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0 && (
+           <img
+             src={post.imageName.startsWith("http") ? post.imageName : `/uploads/posts/${post.imageName}`}
+             alt="Issue media"
+             className="mb-3 h-48 w-full rounded-xl object-cover"
+           />
+        )}
+
         {/* Tagged depts */}
         {isIssue && (post as IssuePost).taggedUsernames?.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-1.5">
@@ -807,7 +831,7 @@ export default function PostCard({
           (post as SocialPost | CommunityPost).hashtags?.map((tag) => (
             <span
               key={tag}
-              className="mr-1.5 inline-block text-xs font-medium text-primary opacity-80"
+              className="mr-1.5 inline-block text-xs font-medium text-blue-700 opacity-80"
             >
               {tag}
             </span>

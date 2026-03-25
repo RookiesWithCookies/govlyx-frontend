@@ -11,6 +11,10 @@ import {
   CheckCircle2,
   WifiOff,
 } from "lucide-react";
+import { HiOutlineArrowRight } from "react-icons/hi";
+import { MdLocationOn, MdAccessTime, MdOutlineVisibility } from "react-icons/md";
+import { HiLightBulb } from "react-icons/hi";
+import { RiAttachment2 } from "react-icons/ri";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, type JSX } from "react";
 
@@ -37,6 +41,7 @@ type Props = { open: boolean; onClose: () => void };
 interface ApiResult {
   ok: boolean;
   message?: string;
+  data?: any; // the created post/poll from backend
 }
 
 // ─── API CALLS ────────────────────────────────────────────────────────────────
@@ -58,7 +63,7 @@ async function apiCreatePost(content: string, targetPincode: string): Promise<Ap
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, message: json?.message ?? `HTTP ${res.status}` };
-  return { ok: true, message: json?.message };
+  return { ok: true, message: json?.message, data: json?.data ?? null };
 }
 
 /**
@@ -83,7 +88,7 @@ async function apiCreatePostWithMedia(
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, message: json?.message ?? `HTTP ${res.status}` };
-  return { ok: true, message: json?.message };
+  return { ok: true, message: json?.message, data: json?.data ?? null };
 }
 
 /**
@@ -91,14 +96,14 @@ async function apiCreatePostWithMedia(
  * SocialPostCreateDto: { content, hashtags?, mentionedUserIds?, allowComments? }
  */
 async function apiCreateSocialPost(content: string): Promise<ApiResult> {
-  const res = await fetch(`${BASE_URL}/api/social-posts`, {
+  const res = await fetch(`${BASE_URL}/api/social-posts/text`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ content, allowComments: true }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, message: json?.message ?? `HTTP ${res.status}` };
-  return { ok: true, message: json?.message };
+  return { ok: true, message: json?.message, data: json?.data ?? null };
 }
 
 /**
@@ -110,9 +115,8 @@ async function apiCreateSocialPostWithMedia(
   files: File[]
 ): Promise<ApiResult> {
   const form = new FormData();
-  form.append("content", content);
-  form.append("allowComments", "true");
-  files.forEach((f) => form.append("mediaFiles", f));
+  form.append("post", new Blob([JSON.stringify({ content, allowComments: true })], { type: "application/json" }));
+  files.forEach((f) => form.append("media", f));
 
   const res = await fetch(`${BASE_URL}/api/social-posts/with-media`, {
     method: "POST",
@@ -121,7 +125,7 @@ async function apiCreateSocialPostWithMedia(
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, message: json?.message ?? `HTTP ${res.status}` };
-  return { ok: true, message: json?.message };
+  return { ok: true, message: json?.message, data: json?.data ?? null };
 }
 
 /**
@@ -147,7 +151,7 @@ async function apiCreatePoll(payload: {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, message: json?.message ?? `HTTP ${res.status}` };
-  return { ok: true, message: json?.message };
+  return { ok: true, message: json?.message, data: json?.data ?? null };
 }
 
 // ─── MEDIA UPLOAD ZONE ────────────────────────────────────────────────────────
@@ -304,6 +308,8 @@ function PostForm({ onClose }: { onClose: () => void }) {
       }
 
       setSubmitted(true);
+      // Dispatch the created post data so Home can prepend it instantly
+      window.dispatchEvent(new CustomEvent("postCreated", { detail: { post: result.data } }));
 
     } catch (e: unknown) {
       const isNetwork = e instanceof TypeError && e.message.toLowerCase().includes("fetch");
@@ -388,8 +394,8 @@ function PostForm({ onClose }: { onClose: () => void }) {
             className="overflow-hidden"
           >
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-orange-400/70 uppercase tracking-wider">
-                📍 Area Pincode <span className="text-red-400">*</span>
+              <label className="text-xs font-semibold text-orange-400/70 uppercase tracking-wider flex items-center gap-1">
+                <MdLocationOn size={14} /> Area Pincode <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
@@ -422,25 +428,28 @@ function PostForm({ onClose }: { onClose: () => void }) {
           value={content}
           onChange={(e) => { setContent(e.target.value); setError(null); }}
         />
-        <p className={`text-xs mt-1.5 ${isReportingIssue ? "text-orange-400/60" : "text-base-content/30"}`}>
-          💡 Tag departments like{" "}
-          <span className={`font-semibold ${isReportingIssue ? "text-orange-400/80" : "text-blue-400/70"}`}>@BMC</span>,{" "}
-          <span className={`font-semibold ${isReportingIssue ? "text-orange-400/80" : "text-blue-400/70"}`}>@PWD</span>,{" "}
-          <span className={`font-semibold ${isReportingIssue ? "text-orange-400/80" : "text-blue-400/70"}`}>@TrafficPolice</span>
+        <p className={`text-xs mt-1.5 flex items-center gap-1 ${isReportingIssue ? "text-orange-400/60" : "text-base-content/30"}`}>
+          <HiLightBulb size={14} className="flex-shrink-0" />
+          <span>
+            Tag departments like{" "}
+            <span className={`font-semibold ${isReportingIssue ? "text-orange-400/80" : "text-blue-400/70"}`}>@BMC</span>,{" "}
+            <span className={`font-semibold ${isReportingIssue ? "text-orange-400/80" : "text-blue-400/70"}`}>@PWD</span>,{" "}
+            <span className={`font-semibold ${isReportingIssue ? "text-orange-400/80" : "text-blue-400/70"}`}>@TrafficPolice</span>
+          </span>
         </p>
       </div>
 
       {/* ── MEDIA UPLOAD ── */}
       <div>
-        <p className={`text-xs font-semibold uppercase tracking-wider mb-1.5 ${isReportingIssue ? "text-orange-400/60" : "text-base-content/40"}`}>
-          📎 {isReportingIssue ? "Evidence / Photos" : "Attach Media (optional)"}
+        <p className={`text-xs font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-1 ${isReportingIssue ? "text-orange-400/60" : "text-base-content/40"}`}>
+          <RiAttachment2 size={14} /> {isReportingIssue ? "Evidence / Photos" : "Attach Media (optional)"}
         </p>
         {/* API routing hint shown to help devs understand the decision in dev builds */}
         {files.length > 0 && (
-          <p className="text-base-content/25 text-xs mb-1.5">
+          <p className="text-base-content/25 text-xs mb-1.5 flex items-center">
             {isReportingIssue
-              ? `→ Will call POST /api/posts/with-media (multipart, ${files.length} file${files.length > 1 ? "s" : ""})`
-              : `→ Will call POST /api/social-posts/with-media (multipart, ${files.length} file${files.length > 1 ? "s" : ""})`}
+              ? <><HiOutlineArrowRight className="mr-1" /> Will call POST /api/posts/with-media (multipart, {files.length} file{files.length > 1 ? "s" : ""})</>
+              : <><HiOutlineArrowRight className="mr-1" /> Will call POST /api/social-posts/with-media (multipart, {files.length} file{files.length > 1 ? "s" : ""})</>}
           </p>
         )}
         <MediaUploadZone accent={isReportingIssue ? "orange" : "blue"} files={files} onChange={setFiles} />
@@ -589,7 +598,9 @@ function PollForm() {
 
       <div className="flex gap-4 p-3 bg-base-300/50 rounded-lg border border-base-300">
         <div className="flex flex-col gap-2 flex-1">
-          <span className="text-base-content/40 text-xs font-semibold uppercase tracking-wider">⏱ Duration</span>
+          <span className="text-base-content/40 text-xs font-semibold uppercase tracking-wider flex items-center gap-1">
+            <MdAccessTime size={14} /> Duration
+          </span>
           <select className="select select-bordered select-sm focus:border-blue-700" value={expiresIn} onChange={(e) => setExpiresIn(e.target.value)}>
             <option value="1d">1 Day</option>
             <option value="3d">3 Days</option>
@@ -619,7 +630,9 @@ function PollForm() {
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="rounded-xl border border-blue-900/50 bg-base-300/40 p-4 mt-1"
           >
-            <p className="text-blue-500 text-xs font-bold uppercase tracking-wider mb-2">👁 Preview</p>
+            <p className="text-blue-700 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1">
+              <MdOutlineVisibility size={14} /> Preview
+            </p>
             <p className="text-base-content font-bold text-sm mb-3">{pollQuestion || "Your question here..."}</p>
             {options.map((opt, i) => opt.trim() ? (
               <div key={i} className={`flex items-center justify-between px-3 py-2.5 rounded-lg mb-1.5 text-sm border ${

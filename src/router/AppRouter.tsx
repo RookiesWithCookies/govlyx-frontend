@@ -1,5 +1,7 @@
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
+import { useEffect } from "react";
+import { jwtDecode } from "jwt-decode";
 
 import MainLayout from "../components/layout/MainLayout";
 
@@ -12,10 +14,6 @@ import Profile from "../pages/Profile";
 import Settings from "../pages/Settings";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
-
-// Invite accept page — exported from Community.tsx
-// Route: /invite/:token
-// Public page: works without login (shows preview), requires login to accept
 import { AcceptInvitePage } from "../pages/Communities";
 
 // ── Page transition wrapper ───────────────────────────────────────────────────
@@ -30,15 +28,70 @@ const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   </motion.div>
 );
 
-const isLoggedIn = () => {
-  /* [DEV_BYPASS] Toggle these lines to switch between Demo and Real Auth */
-  return true; // Demo: Always logged in
-  // return !!localStorage.getItem("token"); // Real: Check local storage
+// ── Token validation ──────────────────────────────────────────────────────────
+const isLoggedIn = (): boolean => {
+  const token = localStorage.getItem("token");
+  if (!token) return false;
+
+  try {
+    const decoded = jwtDecode<{ exp: number }>(token);
+    const isExpired = decoded.exp * 1000 < Date.now();
+    if (isExpired) {
+      localStorage.removeItem("token");
+      return false;
+    }
+    return true;
+  } catch {
+    localStorage.removeItem("token");
+    return false;
+  }
+};
+
+// ── Token expiry watcher ──────────────────────────────────────────────────────
+const useTokenExpiryWatcher = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const check = () => {
+      if (!isLoggedIn()) {
+        navigate("/login", { replace: true });
+      }
+    };
+
+    // Check every 60 seconds
+    const interval = setInterval(check, 60 * 1000);
+
+    // Also schedule a precise redirect exactly when the token expires
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        const decoded = jwtDecode<{ exp: number }>(token);
+        const msUntilExpiry = decoded.exp * 1000 - Date.now();
+        if (msUntilExpiry > 0) {
+          const timeout = setTimeout(() => {
+            localStorage.removeItem("token");
+            navigate("/login", { replace: true });
+          }, msUntilExpiry);
+
+          return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+          };
+        }
+      } catch {
+        localStorage.removeItem("token");
+        navigate("/login", { replace: true });
+      }
+    }
+
+    return () => clearInterval(interval);
+  }, [navigate]);
 };
 
 // ── Router ────────────────────────────────────────────────────────────────────
 const AppRouter = () => {
   const location = useLocation();
+  useTokenExpiryWatcher(); // 👈 runs in background
 
   return (
     <AnimatePresence mode="wait">
@@ -62,25 +115,7 @@ const AppRouter = () => {
           }
         />
 
-        {/*
-          ── Invite accept route ──────────────────────────────────────────────
-          PUBLIC — no auth required to VIEW the invite preview.
-          Auth IS required to ACCEPT (the page redirects to /login?redirect=...
-          if the user is not logged in and clicks "Accept & Join").
-
-          This route must be OUTSIDE the protected <MainLayout /> wrapper so
-          that unauthenticated users can see the invite details page before
-          deciding to log in.
-
-          Backend endpoint called (no auth):
-            GET /api/communities/invites/preview/{token}
-
-          Backend endpoint called (auth required):
-            POST /api/communities/invites/accept/{token}
-
-          The token value comes from the URL param set in inviteLink:
-            https://jansahayak.in/invite/{token}
-        */}
+        {/* ── Invite accept route ── */}
         <Route
           path="/invite/:token"
           element={

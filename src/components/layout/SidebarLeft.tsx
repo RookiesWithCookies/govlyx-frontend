@@ -6,6 +6,7 @@ import {
   User,
   Settings,
 } from "lucide-react";
+import { HiOutlineArrowRight } from "react-icons/hi";
 import { useState, useEffect } from "react";
 
 const navItems = [
@@ -59,7 +60,7 @@ function useCurrentUser() {
 const SidebarLeft = () => {
   const { username, loading } = useCurrentUser();
 
-  const avatarLetter = username ? username.charAt(0).toUpperCase() : "U";
+  // Removing unused avatarLetter
   const displayName = loading ? "Loading..." : (username ?? "Anonymous User");
 
   return (
@@ -69,10 +70,8 @@ const SidebarLeft = () => {
       <div className="rounded-xl bg-base-200 p-4">
         <div className="flex items-center gap-3">
           <div className="avatar placeholder">
-            <div className="w-10 rounded-full bg-blue-700 text-primary-content">
-              <span className="flex font-bold justify-center pt-0.5 text-3xl">
-                {avatarLetter}
-              </span>
+            <div className="w-10 rounded-full overflow-hidden bg-base-200 border border-base-300">
+              <img src={`https://robohash.org/${encodeURIComponent(displayName)}`} alt="Avatar" className="w-full h-full object-cover" />
             </div>
           </div>
           <div>
@@ -91,7 +90,7 @@ const SidebarLeft = () => {
               `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition
                ${
                  isActive
-                   ? "bg-blue-700 text-primary-content"
+                   ? "bg-blue-700 text-white"
                    : "hover:bg-base-300"
                }`
             }
@@ -122,7 +121,7 @@ const SidebarLeft = () => {
           to="/department-feed"
           className="text-sm text-blue-700 hover:underline"
         >
-          View government announcements →
+          View government announcements <HiOutlineArrowRight className="inline-block" />
         </NavLink>
       </div>
     </aside>

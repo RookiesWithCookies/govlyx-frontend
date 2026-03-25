@@ -1,23 +1,32 @@
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  baseURL: "http://localhost:8081", // [DEV_CONFIG] Updated to match backend application.properties. Original: 8080
+  baseURL: "http://localhost:8080",
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-
+// Attach JWT to every request
 axiosInstance.interceptors.request.use((config) => {
-  /* [DEV_BYPASS] Toggle these lines to switch between Real and Dummy/Missing tokens */
-  const token = localStorage.getItem("token") || "demo-token-123"; // Use demo token if none exists
-  // const token = localStorage.getItem("token"); 
-
+  const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default axiosInstance;

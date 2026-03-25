@@ -6,7 +6,7 @@ import SidebarRight from "./SidebarRight";
 
 const MainLayout = () => {
   return (
-    <div className="drawer lg:drawer-open font-mono">
+    <div className="drawer lg:drawer-open">
       {/* Drawer toggle */}
       <input id="mobile-drawer" type="checkbox" className="drawer-toggle" />
 

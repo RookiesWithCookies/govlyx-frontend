@@ -7,7 +7,7 @@ type Props = {
 
 const AuthLayout = ({ children }: Props) => {
   return (
-    <div className="font-mono min-h-screen flex items-center justify-center bg-base-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-base-100 px-4">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

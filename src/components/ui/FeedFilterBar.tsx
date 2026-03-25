@@ -13,7 +13,7 @@ const FeedFilterBar = ({ active }: Props) => {
   const [change,setChange] = useState<ScopeTab>("all");
 
   const leftScope: { key: ScopeTab; label: string }[] = [
-    { key: "all", label: "All" },
+    { key: "all", label: "For You" },
     { key: "location", label: "Location" },
     { key: "following", label: "Following" },
   ];
