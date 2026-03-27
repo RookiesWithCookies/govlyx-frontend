@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowUp,
   ArrowDown,
@@ -14,6 +14,9 @@ import {
   Building2,
   AlertCircle,
   BarChart2,
+  Trash2,
+  UserPlus,
+  MoreVertical,
 } from "lucide-react";
 import { MdCheck } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,7 +46,7 @@ async function recordShare(postType: "posts" | "social-posts", id: number) {
     window.prompt("Copy link:", url);
   }
   apiPost(
-    `/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`,
+    `/api/${postType}/interactions/${id}/share?shareType=LINK_COPY`,
     {}
   ).catch(() => {});
 }
@@ -105,8 +108,12 @@ export type SocialPost = BasePost & {
   isSaved?: boolean;
   isSavedByCurrentUser?: boolean;
   hashtags?: string[];
-  communityId?: null;
+  communityId?: number | null;
   isLikedByCurrentUser?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  isPoll?: boolean;
+  pollId?: number;
 };
 
 export type CommunityPost = BasePost & {
@@ -117,6 +124,8 @@ export type CommunityPost = BasePost & {
   isSavedByCurrentUser?: boolean;
   hashtags?: string[];
   isLikedByCurrentUser?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 };
 
 export type GovernmentPost = BasePost & {
@@ -154,6 +163,8 @@ export type PollPost = BasePost & {
   communityId?: number;
   communityName?: string;
   isLikedByCurrentUser?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 };
 
 export type AnyPost =
@@ -167,12 +178,13 @@ type PostCardProps = {
   post: AnyPost;
   currentUser?: CurrentUser;
   onLike?: (postId: number, liked: boolean) => void;
-  onDislike?: (postId: number, disliked: boolean) => void;
   onSave?: (postId: number, saved: boolean) => void;
   onShare?: (postId: number) => void;
   onComment?: (postId: number) => void;
   onResolve?: (postId: number, isResolved: boolean, message: string) => void;
   onVote?: (pollId: number, optionIds: number[]) => void;
+  onDelete?: (postId: number) => void;
+  onAddUser?: (postId: number) => void;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -211,7 +223,7 @@ function commentPostType(variant: PostVariant): PostType {
 function ActionBtn({
   onClick,
   active = false,
-  activeClass = "bg-blue-700/15 text-blue-700",
+  activeClass = "bg-primary/15 text-primary",
   disabled = false,
   children,
 }: {
@@ -262,12 +274,10 @@ function ScopePill({ scope, desc }: { scope?: BroadcastScope; desc?: string }) {
 
 // ─── ResolveModal ─────────────────────────────────────────────────────────────
 function ResolveModal({
-  postId,
   isOpen,
   onClose,
   onConfirm,
 }: {
-  postId: number;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (msg: string) => void;
@@ -331,12 +341,16 @@ function PollCard({
   onVote,
   onShare,
   onSave,
+  onDelete,
+  onAddUser,
 }: {
   post: PollPost;
   currentUser?: CurrentUser;
   onVote?: (pollId: number, optionIds: number[]) => void;
   onShare?: (postId: number) => void;
   onSave?: (postId: number, saved: boolean) => void;
+  onDelete?: (postId: number) => void;
+  onAddUser?: (postId: number) => void;
 }) {
   const [selected, setSelected] = useState<number[]>(
     post.votedOptionIds ?? []
@@ -347,10 +361,14 @@ function PollCard({
   const [saved, setSaved]       = useState(post.isSaved ?? false);
   const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
   const [voting, setVoting]     = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { copied, flash }       = useCopied();
 
-  const canVote     = !hasVoted && !post.isExpired && !!currentUser;
-  const showResults = hasVoted || post.showResults || post.isExpired;
+  // Auth: user is logged in if we have a token (Home.tsx doesn't pass currentUser)
+  const isLoggedIn  = !!currentUser || !!(localStorage.getItem("authToken") || localStorage.getItem("token"));
+  const canVote     = !hasVoted && !post.isExpired && isLoggedIn;
+  // Only show results after the user has voted or when poll expired
+  const showResults = hasVoted || post.isExpired;
 
   function toggleOption(id: number) {
     if (!canVote) return;
@@ -395,7 +413,7 @@ function PollCard({
     setSaved(next);
     onSave?.(post.id, next);
     try {
-      await apiPost(`/api/interactions/social-posts/${post.id}/save`, {});
+      await apiPost(`/api/social-posts/interactions/${post.id}/save`, {});
     } catch {
       setSaved(!next);
     }
@@ -407,6 +425,37 @@ function PollCard({
     onShare?.(post.id);
     await recordShare("social-posts", post.id);
   }
+  
+  async function handleDelete() {
+    if (onDelete) {
+      onDelete(post.id);
+      return;
+    }
+    if (!window.confirm("Are you sure you want to delete this poll?")) return;
+    setIsDeleting(true);
+    try {
+      await fetch(`/api/polls/${post.pollId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token")}`,
+        },
+      });
+      window.location.reload(); 
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("Failed to delete poll");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function handleAddUser() {
+    if (onAddUser) {
+      onAddUser(post.id);
+      return;
+    }
+    alert("Follow feature coming soon!");
+  }
 
   return (
     <motion.div
@@ -417,18 +466,37 @@ function PollCard({
       {/* Header */}
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         {post.communityId && post.communityName && (
-          <span className="flex items-center gap-1 rounded-full bg-blue-700/10 px-2 py-0.5 text-xs font-semibold text-blue-700">
+          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
             <Users size={11} /> {post.communityName}
           </span>
         )}
-        <span className="font-medium opacity-80">
+        <span className="font-medium opacity-80 flex items-center gap-1">
           {post.userDisplayName || post.username}
+          <button 
+            onClick={handleAddUser}
+            className="p-1 hover:bg-primary/10 rounded-full text-primary transition-colors"
+            title="Add User"
+          >
+            <UserPlus size={14} />
+          </button>
         </span>
         <span className="opacity-40">•</span>
         <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-blue-700/10 px-2 py-0.5 text-xs font-semibold text-blue-700">
-          <BarChart2 size={11} /> Poll
-        </span>
+        {post.canDelete && (
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="ml-auto p-1 text-error hover:bg-error/10 rounded-md transition-colors disabled:opacity-50"
+            title="Delete Poll"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+        {!post.canDelete && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+            <BarChart2 size={11} /> Poll
+          </span>
+        )}
       </div>
 
       <p className="mb-3 font-semibold">{post.question}</p>
@@ -443,31 +511,31 @@ function PollCard({
               key={opt.id}
               onClick={() => toggleOption(opt.id)}
               disabled={!canVote}
-              className={`relative w-full overflow-hidden rounded-lg border text-left transition-colors
+              className={`relative w-full overflow-hidden rounded-lg border text-left transition-all
                 ${
                   isSelected && !hasVoted
-                    ? "border-blue-700"
+                    ? "border-primary ring-1 ring-primary/30"
                     : isVotedFor
-                    ? "border-blue-700/60"
+                    ? "border-primary/60"
                     : "border-base-300"
                 }
-                ${canVote ? "cursor-pointer hover:border-blue-700/50" : "cursor-default"}`}
+                ${canVote ? "cursor-pointer hover:border-primary/60 hover:bg-base-300/30" : "cursor-default"}`}
             >
               {showResults && (
                 <div
                   className={`absolute inset-y-0 left-0 transition-all duration-500
-                    ${isVotedFor ? "bg-blue-700/25" : "bg-base-300/50"}`}
+                    ${isVotedFor ? "bg-primary/20" : "bg-base-300/50"}`}
                   style={{ width: `${opt.percentage}%` }}
                 />
               )}
-              <div className="relative z-10 flex items-center justify-between px-3 py-2 text-sm">
+              <div className="relative z-10 flex items-center justify-between px-3 py-2.5 text-sm">
                 <span className="flex items-center gap-2">
                   {!hasVoted && canVote && (
                     <span
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors
                         ${
                           isSelected
-                            ? "border-blue-700 bg-blue-700"
+                            ? "border-primary bg-primary"
                             : "border-base-content/30"
                         }`}
                     >
@@ -476,12 +544,15 @@ function PollCard({
                       )}
                     </span>
                   )}
+                  {hasVoted && isVotedFor && (
+                    <MdCheck size={16} className="text-primary shrink-0" />
+                  )}
                   {opt.optionText}
                 </span>
                 {showResults && (
                   <span
                     className={`font-semibold ${
-                      isVotedFor ? "text-blue-700" : "opacity-70"
+                      isVotedFor ? "text-primary" : "opacity-70"
                     }`}
                   >
                     {opt.percentage}%
@@ -497,7 +568,7 @@ function PollCard({
         <button
           onClick={submitVote}
           disabled={voting}
-          className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm mt-3 w-full"
+          className="btn bg-primary text-primary-content font-semibold border-none hover:bg-primary/90 btn-sm mt-3 w-full"
         >
           {voting ? "Submitting…" : "Vote"}
         </button>
@@ -558,12 +629,13 @@ export default function PostCard({
   post,
   currentUser,
   onLike,
-  onDislike,
   onSave,
   onShare,
   onComment,
   onResolve,
   onVote,
+  onDelete,
+  onAddUser,
 }: PostCardProps) {
   const [liked, setLiked] = useState(
     !!(post as AnyPost)?.isLikedByCurrentUser
@@ -586,7 +658,28 @@ export default function PostCard({
 
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolving, setResolving]     = useState(false);
+  const [isDeleting, setIsDeleting]   = useState(false);
   const { copied, flash }             = useCopied();
+
+  // Synchronize state with props when post changes
+  useEffect(() => {
+    if (post) {
+      setLiked(!!(post as AnyPost)?.isLikedByCurrentUser);
+      setLikeCount(post.likeCount ?? 0);
+      setShareCount(post.shareCount ?? 0);
+      setSaved(!!(
+        (post as SocialPost).isSaved ??
+        (post as SocialPost).isSavedByCurrentUser ??
+        false
+      ));
+      if ("dislikeCount" in post) {
+        setDislikeCount((post as IssuePost).dislikeCount ?? 0);
+      }
+      if ("isDislikedByCurrentUser" in post) {
+        setDisliked(!!(post as IssuePost).isDislikedByCurrentUser);
+      }
+    }
+  }, [post]);
 
   if (!post) return null;
 
@@ -599,6 +692,8 @@ export default function PostCard({
         onVote={onVote}
         onShare={onShare}
         onSave={onSave}
+        onDelete={onDelete}
+        onAddUser={onAddUser}
       />
     );
   }
@@ -635,7 +730,14 @@ export default function PostCard({
       ? `/api/posts/interactions/${post.id}/like`
       : `/api/social-posts/interactions/${post.id}/like`;
     try {
-      await apiPost(ep, {});
+      const res = await apiPost(ep, {});
+      const data = (res as any)?.data ?? res;
+      if (data && typeof data.isLiked === "boolean") {
+        setLiked(data.isLiked);
+      }
+      if (data && typeof data.newLikeCount === "number") {
+        setLikeCount(data.newLikeCount);
+      }
     } catch {
       setLiked(!next);
       setLikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
@@ -644,20 +746,7 @@ export default function PostCard({
 
   async function handleDislike() {
     if (!isIssue || isResolved) return;
-    const next = !disliked;
-    setDisliked(next);
-    if (next && liked) {
-      setLiked(false);
-      setLikeCount((n) => Math.max(0, n - 1));
-    }
-    setDislikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
-    onDislike?.(post.id, next);
-    try {
-      await apiPost(`/api/interactions/posts/${post.id}/dislike`, {});
-    } catch {
-      setDisliked(!next);
-      setDislikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
-    }
+    alert("Dislike feature coming soon!");
   }
 
   async function handleSave() {
@@ -665,10 +754,14 @@ export default function PostCard({
     setSaved(next);
     onSave?.(post.id, next);
     try {
-      await apiPost(
-        `/api/interactions/${interactionType}/${post.id}/save`,
+      const res = await apiPost(
+        `/api/${interactionType}/interactions/${post.id}/save`,
         {}
       );
+      const data = (res as any)?.data ?? res;
+      if (data && typeof data.isSaved === "boolean") {
+        setSaved(data.isSaved);
+      }
     } catch {
       setSaved(!next);
     }
@@ -697,6 +790,41 @@ export default function PostCard({
     } finally {
       setResolving(false);
     }
+  }
+
+  async function handleDelete() {
+    if (onDelete) {
+      onDelete(post.id);
+      return;
+    }
+    if (!window.confirm("Are you sure you want to delete this post?")) return;
+    setIsDeleting(true);
+    try {
+      const ep = isIssue
+        ? `/api/posts/${post.id}`
+        : `/api/social-posts/${post.id}`;
+      
+      await fetch(ep, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token")}`,
+        },
+      });
+      window.location.reload();
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("Failed to delete post");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function handleAddUser() {
+    if (onAddUser) {
+      onAddUser(post.id);
+      return;
+    }
+    alert("Follow feature coming soon!");
   }
 
   const containerClass = isGovt
@@ -744,18 +872,35 @@ export default function PostCard({
             </span>
           )}
           {isCommunity && (
-            <span className="flex items-center gap-1 rounded-full bg-blue-700/10 px-2 py-0.5 text-xs font-semibold text-blue-700">
+            <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
               <Users size={11} />
               {(post as CommunityPost).communityName}
             </span>
           )}
           {!isGovt && (
-            <span className="font-medium opacity-80">
+            <span className="font-medium opacity-80 flex items-center gap-1">
               {post.userDisplayName || post.username}
+              <button 
+                onClick={handleAddUser}
+                className="p-1 hover:bg-primary/10 rounded-full text-primary transition-colors"
+                title="Add User"
+              >
+                <UserPlus size={14} />
+              </button>
             </span>
           )}
           <span className="opacity-40">•</span>
           <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
+          {(isIssue || isSocial || isCommunity) && (post as any).canDelete && (
+             <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="ml-auto p-1 text-error hover:bg-error/10 rounded-md transition-colors disabled:opacity-50"
+                title="Delete Post"
+              >
+                <Trash2 size={16} />
+              </button>
+          )}
           {(isIssue || isGovt) && (
             <>
               <span className="opacity-40">•</span>
@@ -834,7 +979,7 @@ export default function PostCard({
           (post as SocialPost | CommunityPost).hashtags?.map((tag) => (
             <span
               key={tag}
-              className="mr-1.5 inline-block text-xs font-medium text-blue-700 opacity-80"
+              className="mr-1.5 inline-block text-xs font-medium text-primary opacity-80"
             >
               {tag}
             </span>
@@ -917,7 +1062,6 @@ export default function PostCard({
       </motion.div>
 
       <ResolveModal
-        postId={post.id}
         isOpen={resolveOpen}
         onClose={() => setResolveOpen(false)}
         onConfirm={handleResolveConfirm}

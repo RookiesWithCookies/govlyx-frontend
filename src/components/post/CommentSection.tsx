@@ -88,7 +88,7 @@ export type CommentDto = {
 };
 
 type PaginatedResponse<T> = {
-  data: T[];
+  content: T[];
   hasMore: boolean;
   nextCursor?: number;
 };
@@ -252,7 +252,7 @@ function SingleComment({
       if (cursor) params.set("beforeId", String(cursor));
       const res = await apiFetch(`/api/comments/${comment.id}/replies?${params}`);
       const page: PaginatedResponse<CommentDto> = res?.data ?? res;
-      const fetched: CommentDto[] = page?.data ?? [];
+      const fetched: CommentDto[] = page?.content ?? [];
       setReplies((prev) => (cursor ? [...prev, ...fetched] : fetched));
       setHasMoreReplies(page?.hasMore ?? false);
       setRepliesCursor(page?.nextCursor);
@@ -496,7 +496,7 @@ export default function CommentSection({
             : `/api/comments/social-posts/${postId}/top-level?${params}`;
         const res = await apiFetch(endpoint);
         const page: PaginatedResponse<CommentDto> = res?.data ?? res;
-        const fetched: CommentDto[] = page?.data ?? [];
+        const fetched: CommentDto[] = page?.content ?? [];
         setComments((prev) => (beforeId ? [...prev, ...fetched] : fetched));
         setHasMore(page?.hasMore ?? false);
         setCursor(page?.nextCursor);

@@ -50,7 +50,7 @@ function toPostCardPost(dto: any): AnyPost {
       shareCount: dto.shareCount ?? 0,
     } as GovernmentPost;
   }
-  if (dto.status || dto.targetPincode) {
+  if (dto.targetPincode || dto.issueType || dto.citizenId) {
     return {
       ...dto,
       variant: "issue",
@@ -59,6 +59,45 @@ function toPostCardPost(dto: any): AnyPost {
       shareCount: dto.shareCount ?? 0,
     } as AnyPost;
   }
+
+  // ── Detect polls: isPoll flag + embedded pollData from backend ──
+  if (dto.isPoll && dto.pollData) {
+    const pd = dto.pollData;
+    const author = dto.author;
+    return {
+      id: dto.id,
+      content: dto.content,
+      timeAgo: dto.timeAgo ?? (dto.createdAt ? undefined : "just now"),
+      username: author?.username ?? dto.username ?? "",
+      userDisplayName: author?.displayName ?? dto.userDisplayName ?? "",
+      userProfileImage: author?.profileImage ?? dto.userProfileImage ?? "",
+      likeCount: dto.likeCount ?? 0,
+      commentCount: dto.commentCount ?? 0,
+      shareCount: dto.shareCount ?? 0,
+      variant: "poll",
+      pollId: pd.pollId,
+      question: pd.question ?? dto.content,
+      options: (pd.options ?? []).map((o: any) => ({
+        id: o.id,
+        optionText: o.optionText,
+        voteCount: o.voteCount ?? 0,
+        percentage: o.percentage ?? 0,
+      })),
+      totalVotes: pd.totalVotes ?? 0,
+      allowMultipleVotes: pd.allowMultipleVotes ?? false,
+      isExpired: pd.isExpired ?? false,
+      expiresAt: pd.expiresAt,
+      timeLeft: pd.timeLeft,
+      userHasVoted: pd.userHasVoted ?? false,
+      votedOptionIds: pd.votedOptionIds ?? [],
+      showResults: pd.showResults ?? false,
+      isSaved: dto.isSavedByCurrentUser ?? dto.isSaved ?? false,
+      isLikedByCurrentUser: dto.isLikedByCurrentUser ?? false,
+      canDelete: dto.canDelete ?? false,
+      canEdit: dto.canEdit ?? false,
+    } as any;
+  }
+
   return { ...dto, variant: "social" } as SocialPost;
 }
 
@@ -216,7 +255,7 @@ function useFeed(tab: FeedTab) {
     });
   }, []);
 
-  return { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost };
+  return { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost, setPosts };
 }
 
 function InfiniteScrollTrigger({ onIntersect }: { onIntersect: () => void }) {
@@ -261,7 +300,7 @@ const Home = () => {
     return sourceTab;
   };
 
-  const { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost } =
+  const { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost, setPosts } =
     useFeed(getBackendTab());
 
   const handleLike = useCallback((postId: number, liked: boolean) => {
@@ -280,6 +319,41 @@ const Home = () => {
 
   const handleComment = useCallback((postId: number) => {
     window.location.href = `/post/${postId}`;
+  }, []);
+
+  const handleDelete = useCallback(async (postId: number) => {
+    if (!window.confirm("Are you sure you want to delete this post?")) return;
+    
+    // Determine post type to use correct endpoint
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    let endpoint = `/api/social-posts/${postId}`;
+    if (post.variant === "issue") endpoint = `/api/posts/${postId}`;
+    else if (post.variant === "social" && post.isPoll) endpoint = `/api/polls/${post.pollId}`;
+
+    try {
+      const token = getAuthToken();
+      const res = await fetch(endpoint, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (res.ok) {
+        // Remove post from feed
+        setPosts(prev => prev.filter(p => p.id !== postId));
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.message || "Failed to delete post.");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("An error occurred while deleting the post.");
+    }
+  }, [posts, setPosts]);
+
+  const handleAddUser = useCallback((postId: number) => {
+    alert("This feature (Add/Follow User) is coming soon!");
   }, []);
 
   useEffect(() => {
@@ -411,7 +485,16 @@ const Home = () => {
           <EmptyState title="Nothing here yet" description="Be the first to post, or try a different tab." />
         ) : (
           posts.map((post) => (
-            <PostCard key={post.id} post={post} onLike={handleLike} onSave={handleSave} onShare={handleShare} onComment={handleComment} />
+            <PostCard 
+              key={`${post.id}-${post.variant}`} 
+              post={post} 
+              onLike={handleLike} 
+              onSave={handleSave} 
+              onShare={handleShare} 
+              onComment={handleComment}
+              onDelete={handleDelete}
+              onAddUser={handleAddUser}
+            />
           ))
         )}
 

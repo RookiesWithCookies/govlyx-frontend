@@ -15,6 +15,7 @@ import {
   BadgeCheck,
   Globe,
   MapPin,
+  Trash2,
 } from "lucide-react";
 import EmptyState from "../components/ui/EmptyState";
 import ProfileTabs from "../components/profile/ProfileTabs";
@@ -35,11 +36,32 @@ async function apiFetch(url: string) {
   return res.json();
 }
 
-async function apiPost(url: string, body: unknown = {}) {
+async function apiPost(url: string, body: any = {}) {
+  console.log(`[API POST] ${url}`, body);
   const res = await fetch(url, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    console.error(`[API POST ERROR] ${url} - Status: ${res.status}`);
+    try {
+      const err = await res.json();
+      console.error("[API POST ERROR BODY]", err);
+    } catch {
+      // ignore
+    }
+    throw new Error(`${res.status}`);
+  }
+  const data = await res.json().catch(() => null);
+  console.log(`[API POST SUCCESS] ${url}`, data);
+  return data;
+}
+
+async function apiDelete(url: string) {
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json().catch(() => null);
@@ -57,7 +79,7 @@ async function handleShareAction(
     window.prompt("Copy link:", shareUrl);
   }
   apiPost(
-    `/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`,
+    `/api/${postType}/interactions/${id}/share?shareType=LINK_COPY`,
     {}
   ).catch(() => {});
 }
@@ -133,6 +155,7 @@ type IssuePost = {
   isLikedByCurrentUser?: boolean;
   isDislikedByCurrentUser?: boolean;
   isSaved?: boolean;
+  canDelete?: boolean;
 };
 
 type SocialPost = {
@@ -152,6 +175,10 @@ type SocialPost = {
   department?: string;
   broadcastScope?: BroadcastScope;
   broadcastScopeDescription?: string;
+  canDelete?: boolean;
+  canEdit?: boolean;
+  isPoll?: boolean;
+  pollId?: number;
 };
 
 type PollOptionDto = {
@@ -196,7 +223,7 @@ type CurrentUserInfo = {
 function ActionBtn({
   onClick,
   active = false,
-  activeClass = "bg-blue-700/15 text-blue-700",
+  activeClass = "bg-primary/15 text-primary",
   disabled = false,
   children,
 }: {
@@ -235,12 +262,15 @@ function StatCard({ value, label }: { value: number | string; label: string }) {
 function IssuePostCard({
   post,
   currentUser,
+  onDelete,
 }: {
   post: IssuePost;
   currentUser?: CurrentUserInfo;
+  onDelete?: (id: number) => void;
 }) {
   const [liked, setLiked]               = useState(!!post.isLikedByCurrentUser);
   const [disliked, setDisliked]         = useState(!!post.isDislikedByCurrentUser);
+  const [saved, setSaved]               = useState(!!post.isSaved);
   const [likeCount, setLikeCount]       = useState(post.likeCount ?? 0);
   const [dislikeCount, setDislikeCount] = useState(post.dislikeCount ?? 0);
   const [shareCount, setShareCount]     = useState(post.shareCount ?? 0);
@@ -257,8 +287,17 @@ function IssuePostCard({
     }
     setLikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
     try {
-      await apiPost(`/api/interactions/posts/${post.id}/like`, {});
-    } catch {
+      console.log(`[LIKE] Toggling issue like for ${post.id}`);
+      const res = await apiPost(`/api/posts/interactions/${post.id}/like`, {});
+      const data = res?.data ?? res;
+      if (data && typeof data.isLiked === "boolean") {
+        setLiked(data.isLiked);
+      }
+      if (data && typeof data.newLikeCount === "number") {
+        setLikeCount(data.newLikeCount);
+      }
+    } catch (err) {
+      console.error(`[LIKE ERROR] Issue ${post.id}`, err);
       setLiked(!next);
       setLikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
     }
@@ -266,18 +305,21 @@ function IssuePostCard({
 
   async function handleDislike() {
     if (isResolved) return;
-    const next = !disliked;
-    setDisliked(next);
-    if (next && liked) {
-      setLiked(false);
-      setLikeCount((n) => Math.max(0, n - 1));
-    }
-    setDislikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
+    alert("Dislike feature coming soon!");
+  }
+  
+  async function handleSave() {
+    const prevSaved = saved;
+    const nextSaved = !prevSaved;
+    setSaved(nextSaved);
     try {
-      await apiPost(`/api/interactions/posts/${post.id}/dislike`, {});
-    } catch {
-      setDisliked(!next);
-      setDislikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
+      const res = await apiPost(`/api/posts/interactions/${post.id}/save`, {});
+      const data = res?.data ?? res;
+      if (data && typeof data.isSaved === "boolean") {
+        setSaved(data.isSaved);
+      }
+    } catch { 
+      setSaved(prevSaved); 
     }
   }
 
@@ -300,7 +342,18 @@ function IssuePostCard({
         >
           {isResolved ? "✓ Resolved" : "● Active"}
         </span>
-        <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
+          {post.canDelete && (
+            <button 
+              onClick={() => onDelete?.(post.id)}
+              className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
+              title="Delete issue"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="text-sm line-clamp-3">{post.content}</p>
@@ -321,6 +374,13 @@ function IssuePostCard({
         <span className="flex items-center gap-1 px-2 py-1 text-xs opacity-50">
           <Eye size={14} />{post.viewCount ?? 0}
         </span>
+        <ActionBtn
+          onClick={handleSave}
+          active={saved}
+          activeClass="bg-accent/15 text-accent"
+        >
+          <Bookmark size={14} className={saved ? "fill-current" : ""} />
+        </ActionBtn>
         <ActionBtn
           onClick={handleShare}
           active={copied}
@@ -358,20 +418,27 @@ function IssuePostCard({
 function GovernmentBroadcastCard({
   post,
   currentUser,
+  onDelete,
 }: {
   post: SocialPost;
   currentUser?: CurrentUserInfo;
+  onDelete?: (id: number) => void;
 }) {
   const [saved, setSaved]           = useState(!!post.isSavedByCurrentUser);
   const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
   const { copied, flash }           = useCopiedToast();
 
   async function handleSave() {
-    const next = !saved;
-    setSaved(next);
+    const prevSaved = saved;
+    const nextSaved = !prevSaved;
+    setSaved(nextSaved);
     try {
-      await apiPost(`/api/interactions/social-posts/${post.id}/save`, {});
-    } catch { setSaved(!next); }
+      const res = await apiPost(`/api/social-posts/interactions/${post.id}/save`, {});
+      const data = res?.data ?? res;
+      if (data && typeof data.isSaved === "boolean") {
+        setSaved(data.isSaved);
+      }
+    } catch { setSaved(prevSaved); }
   }
 
   async function handleShare() {
@@ -403,7 +470,18 @@ function GovernmentBroadcastCard({
             {scopeLabel()}
           </span>
         </div>
-        <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
+          {post.canDelete && (
+            <button 
+              onClick={() => onDelete?.(post.id)}
+              className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
+              title="Delete broadcast"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="text-sm line-clamp-3">{post.content}</p>
@@ -445,9 +523,11 @@ function GovernmentBroadcastCard({
 function PollCard({
   post,
   currentUser,
+  onDelete,
 }: {
   post: SocialPost;
   currentUser?: CurrentUserInfo;
+  onDelete?: (id: number) => void;
 }) {
   const p = post.poll!;
   const [options, setOptions]       = useState<PollOptionDto[]>(p.options ?? []);
@@ -498,11 +578,16 @@ function PollCard({
   }
 
   async function handleSave() {
-    const next = !saved;
-    setSaved(next);
+    const prevSaved = saved;
+    const nextSaved = !prevSaved;
+    setSaved(nextSaved);
     try {
-      await apiPost(`/api/interactions/social-posts/${post.id}/save`, {});
-    } catch { setSaved(!next); }
+      const res = await apiPost(`/api/social-posts/interactions/${post.id}/save`, {});
+      const data = res?.data ?? res;
+      if (data && typeof data.isSaved === "boolean") {
+        setSaved(data.isSaved);
+      }
+    } catch { setSaved(prevSaved); }
   }
 
   async function handleShare() {
@@ -514,10 +599,21 @@ function PollCard({
   return (
     <div className="rounded-xl bg-base-200 p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
           <BarChart2 size={13} /> Poll
         </div>
-        <span className="text-xs opacity-50 shrink-0">{timeAgo(post.createdAt)}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
+          {post.canDelete && (
+            <button 
+              onClick={() => onDelete?.(post.id)}
+              className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
+              title="Delete poll"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="text-sm font-semibold">{p.question}</p>
@@ -532,13 +628,13 @@ function PollCard({
               onClick={() => toggle(opt.id)}
               disabled={!canVote}
               className={`relative w-full overflow-hidden rounded-lg border text-left transition-colors
-                ${isSelected && !hasVoted ? "border-blue-700" : isVotedFor ? "border-blue-700/60" : "border-base-300"}
-                ${canVote ? "cursor-pointer hover:border-blue-700/50" : "cursor-default"}`}
+                ${isSelected && !hasVoted ? "border-primary ring-1 ring-primary/30" : isVotedFor ? "border-primary/60" : "border-base-300"}
+                ${canVote ? "cursor-pointer hover:border-primary/60 hover:bg-base-300/30" : "cursor-default"}`}
             >
               {showResults && (
                 <div
                   className={`absolute left-0 top-0 h-full transition-all duration-500
-                    ${isVotedFor ? "bg-blue-700/25" : "bg-base-300/50"}`}
+                    ${isVotedFor ? "bg-primary/20" : "bg-base-300/50"}`}
                   style={{ width: `${opt.percentage}%` }}
                 />
               )}
@@ -547,7 +643,7 @@ function PollCard({
                   {canVote && (
                     <span
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2
-                        ${isSelected ? "border-blue-700 bg-blue-700" : "border-base-content/30"}`}
+                        ${isSelected ? "border-primary bg-primary" : "border-base-content/30"}`}
                     >
                       {isSelected && (
                         <span className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -557,7 +653,7 @@ function PollCard({
                   {opt.optionText}
                 </span>
                 {showResults && (
-                  <span className={`font-semibold ${isVotedFor ? "text-blue-700" : "opacity-60"}`}>
+                  <span className={`font-semibold ${isVotedFor ? "text-primary" : "opacity-60"}`}>
                     {opt.percentage}%
                   </span>
                 )}
@@ -568,7 +664,7 @@ function PollCard({
       </div>
 
       {canVote && selected.length > 0 && (
-        <button onClick={submitVote} disabled={voting} className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm w-full">
+        <button onClick={submitVote} disabled={voting} className="btn bg-primary text-primary-content font-semibold border-none hover:bg-primary/90 btn-sm w-full">
           {voting ? "Submitting…" : "Vote"}
         </button>
       )}
@@ -618,12 +714,14 @@ function PollCard({
 function SocialPostCard({
   post,
   currentUser,
+  onDelete,
 }: {
   post: SocialPost;
   currentUser?: CurrentUserInfo;
+  onDelete?: (id: number) => void;
 }) {
-  if (post.variant === "poll" && post.poll) return <PollCard post={post} currentUser={currentUser} />;
-  if (post.variant === "government") return <GovernmentBroadcastCard post={post} currentUser={currentUser} />;
+  if (post.variant === "poll" && post.poll) return <PollCard post={post} currentUser={currentUser} onDelete={onDelete} />;
+  if (post.variant === "government") return <GovernmentBroadcastCard post={post} currentUser={currentUser} onDelete={onDelete} />;
 
   const [liked, setLiked]           = useState(!!post.isLikedByCurrentUser);
   const [saved, setSaved]           = useState(!!post.isSavedByCurrentUser);
@@ -636,19 +734,33 @@ function SocialPostCard({
     setLiked(next);
     setLikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
     try {
-      await apiPost(`/api/interactions/social-posts/${post.id}/like`, {});
-    } catch {
+      console.log(`[LIKE] Toggling social like for ${post.id}`);
+      const res = await apiPost(`/api/social-posts/interactions/${post.id}/like`, {});
+      const data = res?.data ?? res;
+      if (data && typeof data.isLiked === "boolean") {
+        setLiked(data.isLiked);
+      }
+      if (data && typeof data.newLikeCount === "number") {
+        setLikeCount(data.newLikeCount);
+      }
+    } catch (err) {
+      console.error(`[LIKE ERROR] Social ${post.id}`, err);
       setLiked(!next);
       setLikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
     }
   }
 
   async function handleSave() {
-    const next = !saved;
-    setSaved(next);
+    const prevSaved = saved;
+    const nextSaved = !prevSaved;
+    setSaved(nextSaved);
     try {
-      await apiPost(`/api/interactions/social-posts/${post.id}/save`, {});
-    } catch { setSaved(!next); }
+      const res = await apiPost(`/api/social-posts/interactions/${post.id}/save`, {});
+      const data = res?.data ?? res;
+      if (data && typeof data.isSaved === "boolean") {
+        setSaved(data.isSaved);
+      }
+    } catch { setSaved(prevSaved); }
   }
 
   async function handleShare() {
@@ -661,7 +773,18 @@ function SocialPostCard({
     <div className="rounded-xl bg-base-200 p-4 space-y-2">
       <div className="flex justify-between items-start">
         <p className="text-sm line-clamp-3 flex-1">{post.content}</p>
-        <span className="text-xs opacity-50 ml-2 shrink-0">{timeAgo(post.createdAt)}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
+          {post.canDelete && (
+            <button 
+              onClick={() => onDelete?.(post.id)}
+              className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
+              title="Delete post"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {post.mediaUrls && post.mediaUrls.length > 0 && (
@@ -680,7 +803,7 @@ function SocialPostCard({
       {post.hashtags && post.hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {post.hashtags.map((tag) => (
-            <span key={tag} className="text-xs text-blue-700 opacity-80">{tag}</span>
+            <span key={tag} className="text-xs text-primary opacity-80">{tag}</span>
           ))}
         </div>
       )}
@@ -727,7 +850,7 @@ function ActivityIcon({ type }: { type: ActivityItem["icon"] }) {
     );
   if (type === "comment")
     return (
-      <div className={`${cls} bg-blue-100 text-blue-700`}>
+      <div className={`${cls} bg-primary/15 text-primary`}>
         <MessageSquare size={13} />
       </div>
     );
@@ -744,6 +867,25 @@ function ActivityIcon({ type }: { type: ActivityItem["icon"] }) {
 const Profile = () => {
   const [tab, setTab]               = useState<Tab>("posts");
   const [postFilter, setPostFilter] = useState<PostFilter>("all");
+
+  async function handleDelete(type: 'posts' | 'social-posts', id: number) {
+    if (!window.confirm("Are you sure you want to delete this content? This action cannot be undone.")) return;
+    try {
+      await apiDelete(`/api/${type}/${id}`);
+      if (type === 'posts') {
+        setAllPosts(prev => prev.filter(p => p.id !== id));
+        setActivePosts(prev => prev.filter(p => p.id !== id));
+        setResolvedPosts(prev => prev.filter(p => p.id !== id));
+        setIssueCount(n => Math.max(0, n - 1));
+      } else {
+        setSocialPosts(prev => prev.filter(p => p.id !== id));
+        setSocialCount(n => Math.max(0, n - 1));
+      }
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("Failed to delete content. Please try again later.");
+    }
+  }
 
   const [username, setUsername]         = useState<string>("...");
   const [avatarLetter, setAvatarLetter] = useState("U");
@@ -791,7 +933,7 @@ const Profile = () => {
   useEffect(() => {
     apiFetch("/api/posts/my-posts?limit=100")
       .then((b) => {
-        const posts: IssuePost[] = b?.data?.data ?? [];
+        const posts: IssuePost[] = b?.data?.content ?? [];
         setAllPosts(posts);
         setIssueCount(posts.length);
       })
@@ -799,14 +941,41 @@ const Profile = () => {
 
     apiFetch("/api/social-posts/my-posts?limit=100")
       .then((b) => {
-        const posts: SocialPost[] = b?.data?.data ?? [];
+        const rawPosts: any[] = b?.data?.content ?? [];
+        // Map backend pollData to the Profile's expected `poll` field
+        const posts: SocialPost[] = rawPosts.map((p: any) => {
+          if (p.isPoll && p.pollData) {
+            return {
+              ...p,
+              variant: "poll" as const,
+              poll: {
+                pollId: p.pollData.pollId,
+                question: p.pollData.question ?? p.content,
+                options: (p.pollData.options ?? []).map((o: any) => ({
+                  id: o.id,
+                  optionText: o.optionText,
+                  voteCount: o.voteCount ?? 0,
+                  percentage: o.percentage ?? 0,
+                })),
+                totalVotes: p.pollData.totalVotes ?? 0,
+                allowMultipleVotes: p.pollData.allowMultipleVotes ?? false,
+                isExpired: p.pollData.isExpired ?? false,
+                timeLeft: p.pollData.timeLeft,
+                userHasVoted: p.pollData.userHasVoted ?? false,
+                votedOptionIds: p.pollData.votedOptionIds ?? [],
+                showResults: p.pollData.showResults ?? false,
+              } as PollSummaryDto,
+            } as SocialPost;
+          }
+          return p as SocialPost;
+        });
         setSocialCount(posts.length);
         setSocialPosts(posts);
       })
       .catch(() => {});
 
     apiFetch("/api/communities/me?limit=100")
-      .then((b) => setCommunityCount(b?.data?.data?.length ?? 0))
+      .then((b) => setCommunityCount(b?.data?.content?.length ?? 0))
       .catch(() => {});
   }, []);
 
@@ -825,7 +994,7 @@ const Profile = () => {
 
     apiFetch(url)
       .then((b) => {
-        const posts: IssuePost[] = b?.data?.data ?? [];
+        const posts: IssuePost[] = b?.data?.content ?? [];
         if (postFilter === "active") setActivePosts(posts);
         if (postFilter === "resolved") setResolvedPosts(posts);
       })
@@ -839,7 +1008,7 @@ const Profile = () => {
     if (socialPosts.length > 0) return;
     setLoadingSocial(true);
     apiFetch("/api/social-posts/my-posts?limit=50")
-      .then((b) => setSocialPosts(b?.data?.data ?? []))
+      .then((b) => setSocialPosts(b?.data?.content ?? []))
       .catch(() => {})
       .finally(() => setLoadingSocial(false));
   }, [tab]);
@@ -910,13 +1079,13 @@ const Profile = () => {
       {/* Profile Header */}
       <div className="rounded-xl border border-base-300 bg-base-200 p-4">
         <div className="flex items-center gap-4">
-          <div className="h-14 w-14 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold text-2xl">
+          <div className="h-14 w-14 rounded-full bg-primary flex items-center justify-center text-primary-content font-bold text-2xl">
             {avatarLetter}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="font-semibold text-lg">{username}</h1>
-              <ShieldCheck size={16} className="text-blue-700" />
+              <ShieldCheck size={16} className="text-primary" />
             </div>
             <p className="text-sm opacity-70">
               {memberSince ? `Member since ${memberSince}` : "Loading…"} •{" "}
@@ -946,7 +1115,7 @@ const Profile = () => {
                 onClick={() => setPostFilter(f)}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition ${
                   postFilter === f
-                    ? "bg-blue-700 text-white border-blue-700"
+                    ? "bg-primary text-primary-content border-primary"
                     : "border-base-300 hover:border-blue-400"
                 }`}
               >
@@ -967,7 +1136,7 @@ const Profile = () => {
             />
           ) : (
             displayedPosts.map((p) => (
-              <IssuePostCard key={p.id} post={p} currentUser={currentUser} />
+              <IssuePostCard key={p.id} post={p} currentUser={currentUser} onDelete={(id) => handleDelete('posts', id)} />
             ))
           )}
         </div>
@@ -985,7 +1154,7 @@ const Profile = () => {
             />
           ) : (
             socialPosts.map((p) => (
-              <SocialPostCard key={p.id} post={p} currentUser={currentUser} />
+              <SocialPostCard key={p.id} post={p} currentUser={currentUser} onDelete={(id) => handleDelete('social-posts', id)} />
             ))
           )}
         </div>
