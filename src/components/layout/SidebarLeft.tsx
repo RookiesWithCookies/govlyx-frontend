@@ -6,7 +6,6 @@ import {
   User,
   Settings,
 } from "lucide-react";
-import { HiOutlineArrowRight } from "react-icons/hi";
 import { useState, useEffect } from "react";
 
 const navItems = [
@@ -88,11 +87,10 @@ const SidebarLeft = () => {
             to={to}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition
-               ${
-                 isActive
-                   ? "bg-blue-700 text-white"
-                   : "hover:bg-base-300"
-               }`
+               ${isActive
+                ? "bg-[#1D4ED8] text-white"
+                : "hover:bg-base-300"
+              }`
             }
           >
             <Icon size={18} />
@@ -112,17 +110,6 @@ const SidebarLeft = () => {
           <li className="truncate">Education India</li>
           <li className="truncate">Baramati News</li>
         </ul>
-      </div>
-
-      {/* Official Updates */}
-      <div className="rounded-xl bg-base-200 p-4">
-        <h3 className="font-semibold text-sm mb-2">Official Updates</h3>
-        <NavLink
-          to="/department-feed"
-          className="text-sm text-blue-700 hover:underline"
-        >
-          View government announcements <HiOutlineArrowRight className="inline-block" />
-        </NavLink>
       </div>
     </aside>
   );

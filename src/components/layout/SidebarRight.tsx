@@ -47,7 +47,7 @@ const SidebarRight = () => {
           <motion.div
             className="relative flex h-48 w-48 items-center justify-center"
             initial={{ rotateY: 0, rotateX: 0 }}
-            animate={{ 
+            animate={{
               rotateY: [0, 15, 0, -15, 0],
               rotateX: [0, 5, 0, -5, 0],
               y: [0, -10, 0]
@@ -60,11 +60,11 @@ const SidebarRight = () => {
             style={{ perspective: 1000, transformStyle: "preserve-3d" }}
           >
             {/* Glow effect */}
-            <div className="absolute inset-0 scale-110 rounded-full bg-primary/20 blur-2xl filter" />
-            
-            <motion.img 
-              src={govlyxLogo} 
-              alt="Govlyx Logo" 
+            <div className="absolute inset-0 scale-110 rounded-full bg-[#1D4ED8]/20 blur-2xl filter" />
+
+            <motion.img
+              src={govlyxLogo}
+              alt="Govlyx Logo"
               className="z-10 h-32 w-32 drop-shadow-2xl"
               whileHover={{ scale: 1.1, rotateY: 180 }}
               transition={{ duration: 0.8 }}

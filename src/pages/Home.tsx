@@ -1,36 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Flame, Clock, ArrowUp, SlidersHorizontal } from "lucide-react";
+import { Flame, Clock, ArrowUp, SlidersHorizontal, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PostCard from "../components/post/PostCard";
 import type { AnyPost, SocialPost, GovernmentPost } from "../components/post/PostCard";
 import EmptyState from "../components/ui/EmptyState";
 import Skeleton from "../components/ui/Skeleton";
 
-interface PaginatedResponse<T> {
-  content: T[];
-  hasMore: boolean;
-  nextCursor: number | null;
-  size: number;
-}
-
-interface SocialPostDto {
-  id: number;
-  content: string;
-  timeAgo?: string;
-  username: string;
-  userDisplayName?: string;
-  userProfileImage?: string;
-  likeCount: number;
-  commentCount: number;
-  shareCount: number;
-  isLikedByCurrentUser?: boolean;
-  isSaved?: boolean;
-  hashtags?: string[];
-  isGovernmentBroadcast?: boolean;
-  department?: string;
-  broadcastScope?: "AREA" | "DISTRICT" | "STATE" | "COUNTRY";
-  broadcastScopeDescription?: string;
-}
+// Unused types removed for lint cleanup
 
 type FeedTab = "all" | "location" | "following" | "hot" | "new" | "top" | "for-you" | "official";
 
@@ -103,22 +79,29 @@ function toPostCardPost(dto: any): AnyPost {
 
 const FEED_SIZE = 20;
 
-const PostSkeleton = () => (
-  <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3 animate-pulse">
-    <div className="flex items-center gap-2">
-      <Skeleton className="h-4 w-1/4" />
-      <Skeleton className="h-4 w-12" />
+const PostSkeleton = ({ isWide }: { isWide: boolean }) => {
+  return (
+    <div className={`col-span-12 md:${isWide ? "col-span-8" : "col-span-4"} rounded-3xl border border-base-300 bg-base-200 p-6 space-y-4 animate-pulse shadow-sm h-full flex flex-col justify-between`}>
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <div className="space-y-1.5 flex-1">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-3 w-1/4 opacity-50" />
+          </div>
+        </div>
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-4 w-4/6 opacity-70" />
+      </div>
+      <div className="flex gap-4 pt-4 border-t border-base-300/50">
+        <Skeleton className="h-8 w-16 rounded-lg" />
+        <Skeleton className="h-8 w-16 rounded-lg" />
+        <Skeleton className="h-8 w-16 rounded-lg" />
+      </div>
     </div>
-    <Skeleton className="h-3 w-full" />
-    <Skeleton className="h-3 w-5/6" />
-    <Skeleton className="h-3 w-4/6" />
-    <div className="flex gap-3 pt-1">
-      <Skeleton className="h-7 w-14" />
-      <Skeleton className="h-7 w-14" />
-      <Skeleton className="h-7 w-14" />
-    </div>
-  </div>
-);
+  );
+};
 
 function useFeed(tab: FeedTab) {
   const [posts, setPosts] = useState<AnyPost[]>([]);
@@ -138,13 +121,13 @@ function useFeed(tab: FeedTab) {
         const params = new URLSearchParams({ limit: String(FEED_SIZE) });
         if (cursor !== null) params.set("beforeId", String(cursor));
         if (tab === "hot" || tab === "new" || tab === "top") params.set("sort", tab);
-        
+
         // Map frontend tabs to backend endpoints
         let endpoints: string[] = [];
         if (tab === "for-you") {
           endpoints = [
-            `/api/feeds/enhanced/mixed`, 
-            `/api/social-posts/feed/home`, 
+            `/api/feeds/enhanced/mixed`,
+            `/api/social-posts/feed/home`,
             `/api/social-posts/feed/trending`,
             `/api/social-posts/my-posts`
           ];
@@ -156,8 +139,8 @@ function useFeed(tab: FeedTab) {
           endpoints = [`/api/feeds/enhanced/country`];
         } else {
           endpoints = [
-            `/api/feeds/enhanced/mixed`, 
-            `/api/social-posts/feed/home`, 
+            `/api/feeds/enhanced/mixed`,
+            `/api/social-posts/feed/home`,
             `/api/social-posts/feed/trending`,
             `/api/social-posts/my-posts`
           ];
@@ -189,7 +172,7 @@ function useFeed(tab: FeedTab) {
           const items = pageData.content ?? pageData.items ?? [];
           mergedData = [...mergedData, ...items];
           if (pageData.hasMore || pageData.hasNextPage) anyHasMore = true;
-          
+
           // Try to get the lowest ID for cursor
           const next = pageData.nextCursor ?? pageData.lastId ?? pageData.nextCursorId;
           if (next && (!newCursor || next < newCursor)) {
@@ -293,7 +276,7 @@ const Home = () => {
   const [sortTab, setSortTab] = useState<"hot" | "new" | "top">("hot");
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
-  
+
   const getBackendTab = (): FeedTab => {
     if (sourceTab === "all") return sortTab;
     if (sourceTab === "location") return "for-you";
@@ -314,7 +297,7 @@ const Home = () => {
   }, [updatePost]);
 
   const handleShare = useCallback((postId: number) => {
-    navigator.clipboard?.writeText(`${window.location.origin}/post/${postId}`).catch(() => {});
+    navigator.clipboard?.writeText(`${window.location.origin}/post/${postId}`).catch(() => { });
   }, []);
 
   const handleComment = useCallback((postId: number) => {
@@ -323,7 +306,7 @@ const Home = () => {
 
   const handleDelete = useCallback(async (postId: number) => {
     if (!window.confirm("Are you sure you want to delete this post?")) return;
-    
+
     // Determine post type to use correct endpoint
     const post = posts.find(p => p.id === postId);
     if (!post) return;
@@ -376,15 +359,14 @@ const Home = () => {
     <div className="space-y-4">
       <div className="sticky top-2 z-30">
         <div className="flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-100/90 p-2 backdrop-blur-md shadow-sm lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-          
+
           {/* Mobile Top Header (Toggle) */}
           <div className="flex lg:hidden items-center justify-between px-2 py-1">
             <span className="text-sm font-bold opacity-60">Feed Filters</span>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-sm font-bold ${
-                showFilters ? "bg-blue-700 text-white border-blue-700 shadow-md" : "bg-base-200 border-base-300 text-base-content/70"
-              }`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-sm font-bold ${showFilters ? "bg-[#1D4ED8] text-white border-[#1D4ED8] shadow-md" : "bg-base-200 border-base-300 text-base-content/70"
+                }`}
             >
               <SlidersHorizontal size={16} />
               {showFilters ? "Hide" : "Explore"}
@@ -406,11 +388,10 @@ const Home = () => {
                       <button
                         key={t.key}
                         onClick={() => setSourceTab(t.key)}
-                        className={`flex-1 lg:flex-none rounded-lg px-4 py-1.5 text-sm font-bold transition-all whitespace-nowrap ${
-                          sourceTab === t.key 
-                            ? "bg-blue-700 text-white shadow-md" 
-                            : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
-                        }`}
+                        className={`flex-1 lg:flex-none rounded-lg px-4 py-1.5 text-sm font-bold transition-all whitespace-nowrap ${sourceTab === t.key
+                          ? "bg-[#1D4ED8] text-white shadow-md"
+                          : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
+                          }`}
                       >
                         {t.label}
                       </button>
@@ -420,9 +401,8 @@ const Home = () => {
                   {/* Sort Toggle (Mobile only, visible when filters are expanded) */}
                   <button
                     onClick={() => setShowSort(!showSort)}
-                    className={`lg:hidden flex items-center justify-center p-2 h-[38px] w-[38px] rounded-xl border transition-all ${
-                      showSort ? "bg-blue-100 border-blue-300 text-blue-700" : "bg-base-200 border-base-300 text-base-content/60"
-                    }`}
+                    className={`lg:hidden flex items-center justify-center p-2 h-[38px] w-[38px] rounded-xl border transition-all ${showSort ? "bg-[#1D4ED8]/10 border-[#1D4ED8]/30 text-[#1D4ED8]" : "bg-base-200 border-base-300 text-base-content/60"
+                      }`}
                   >
                     <Clock size={18} />
                   </button>
@@ -434,7 +414,7 @@ const Home = () => {
                   {/* Right: Sort Tabs (Desktop always, Mobile toggled) */}
                   <AnimatePresence>
                     {(showSort || window.innerWidth >= 1024) && (
-                      <motion.div 
+                      <motion.div
                         initial={window.innerWidth < 1024 ? { height: 0, opacity: 0 } : false}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
@@ -445,11 +425,10 @@ const Home = () => {
                             <button
                               key={t.key}
                               onClick={() => { setSortTab(t.key); if (window.innerWidth < 1024) setShowSort(false); }}
-                              className={`flex flex-1 lg:flex-none items-center justify-center gap-2 rounded-lg px-4 py-1.5 text-sm font-bold transition-all ${
-                                sortTab === t.key 
-                                  ? "bg-blue-700 text-white shadow-md" 
-                                  : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
-                              }`}
+                              className={`flex flex-1 lg:flex-none items-center justify-center gap-2 rounded-lg px-4 py-1.5 text-sm font-bold transition-all ${sortTab === t.key
+                                ? "bg-[#1D4ED8] text-white shadow-md"
+                                : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
+                                }`}
                             >
                               <t.icon size={16} />
                               {t.label}
@@ -478,39 +457,61 @@ const Home = () => {
         </div>
       )}
 
-      <div className="space-y-3">
+      {/* Asymmetric Grid Layout (12-col based) */}
+      <div className="grid grid-cols-12 gap-4 w-full">
         {initialLoading ? (
-          Array.from({ length: 5 }).map((_, i) => <PostSkeleton key={i} />)
+          Array.from({ length: 8 }).map((_, i) => (
+            <PostSkeleton key={`sk-${i}`} isWide={i % 4 === 0 || i % 4 === 3} />
+          ))
         ) : posts.length === 0 && !loading && !error ? (
-          <EmptyState title="Nothing here yet" description="Be the first to post, or try a different tab." />
+          <div className="col-span-12">
+            <EmptyState title="Nothing here yet" description="Be the first to post, or try a different tab." />
+          </div>
         ) : (
-          posts.map((post) => (
-            <PostCard 
-              key={`${post.id}-${post.variant}`} 
-              post={post} 
-              onLike={handleLike} 
-              onSave={handleSave} 
-              onShare={handleShare} 
-              onComment={handleComment}
-              onDelete={handleDelete}
-              onAddUser={handleAddUser}
-            />
+          posts.map((post, i) => {
+            const isWide = i % 4 === 0 || i % 4 === 3;
+            return (
+              <div
+                key={`${post.id}-${post.variant}`}
+                className={`col-span-12 md:${isWide ? "col-span-8" : "col-span-4"} h-full`}
+              >
+                <PostCard
+                  post={post}
+                  onLike={handleLike}
+                  onSave={handleSave}
+                  onShare={handleShare}
+                  onComment={handleComment}
+                  onDelete={handleDelete}
+                  onAddUser={handleAddUser}
+                />
+              </div>
+            );
+          })
+        )}
+
+        {!initialLoading && loading && (
+          Array.from({ length: 2 }).map((_, i) => (
+            <PostSkeleton key={`more-sk-${i}`} isWide={(posts.length + i) % 4 === 0 || (posts.length + i) % 4 === 3} />
           ))
         )}
 
-        {!initialLoading && loading &&
-          Array.from({ length: 3 }).map((_, i) => <PostSkeleton key={`more-${i}`} />)}
-
         {!initialLoading && hasMore && !loading && !error && (
-          <InfiniteScrollTrigger onIntersect={loadMore} />
+          <div className="col-span-12 pt-8">
+            <InfiniteScrollTrigger onIntersect={loadMore} />
+          </div>
         )}
 
         {!hasMore && posts.length > 0 && !error && (
-          <p className="py-4 text-center text-xs opacity-40">You've reached the end.</p>
+          <div className="col-span-12">
+            <p className="py-12 text-center text-xs opacity-40 font-bold tracking-widest uppercase flex items-center justify-center gap-2">
+              <Sparkles size={16} className="text-amber-400" />
+              You've reached the end of the feed
+            </p>
+          </div>
         )}
       </div>
     </div>
   );
 };
 
-export default Home;
+export default Home;

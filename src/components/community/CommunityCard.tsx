@@ -23,18 +23,18 @@ const CommunityCard = ({ slug, name, description, members, avatarUrl, privacy, o
 
   return (
     <div
-      className="group relative rounded-2xl border border-base-300 bg-base-100 overflow-hidden cursor-pointer transition-all duration-200 hover:border-blue-700/50 hover:shadow-[0_4px_24px_-4px_rgba(29,78,216,0.18)] hover:scale-[1.015] active:scale-[0.98]"
+      className="group relative rounded-2xl border border-base-300 bg-base-100 overflow-hidden cursor-pointer transition-all duration-200 min-w-0"
       style={{ transform: "translateZ(0)" }}
       onClick={handlePress}
     >
       <div className="p-4 flex gap-3.5 items-start relative">
         {/* Avatar */}
         <div className="shrink-0 relative">
-          <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-base-300 group-hover:ring-blue-700/40 transition-all duration-200 shadow-sm group-hover:shadow-md">
+          <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-base-300 transition-all duration-200 shadow-sm">
             <img
               src={imgSrc}
               alt={name}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="w-full h-full object-cover transition-transform duration-300"
               onError={e => { (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(name)}`; }}
             />
           </div>
@@ -68,7 +68,7 @@ const CommunityCard = ({ slug, name, description, members, avatarUrl, privacy, o
 
           <div className="flex items-center justify-between mt-2.5">
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-base-content/50">
-              <Users size={12} className="text-blue-700/70" />
+              <Users size={12} className="text-[#1D4ED8]/70" />
               {members.toLocaleString()} members
             </span>
           </div>
@@ -76,9 +76,9 @@ const CommunityCard = ({ slug, name, description, members, avatarUrl, privacy, o
       </div>
 
       {/* Bottom CTA bar */}
-      <div className="border-t border-base-200 px-4 py-2.5 flex items-center justify-center gap-2 transition-colors duration-200 group-hover:bg-blue-700/8">
+      <div className="border-t border-base-200 px-4 py-2.5 flex items-center justify-center gap-2 transition-colors duration-200">
         <span className="text-xs font-semibold text-base-content/60 flex items-center gap-1.5">
-          View Community <ArrowRight size={12} className="transition-transform duration-200 group-hover:translate-x-1" />
+          View Community <ArrowRight size={12} className="transition-transform duration-200" />
         </span>
       </div>
     </div>

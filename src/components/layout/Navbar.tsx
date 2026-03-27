@@ -80,7 +80,7 @@ const Navbar = () => {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.35 }}
       >
-        <div className="mx-auto flex h-14 max-w-[1460px] items-center gap-3 px-4">
+        <div className="mx-auto flex h-14 max-w-[1780px] items-center gap-3 px-4">
 
           {/* MOBILE MENU */}
           <label htmlFor="mobile-drawer" className="btn btn-ghost btn-sm lg:hidden">

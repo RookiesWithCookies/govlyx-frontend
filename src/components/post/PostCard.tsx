@@ -16,7 +16,10 @@ import {
   BarChart2,
   Trash2,
   UserPlus,
-  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ImageIcon,
 } from "lucide-react";
 import { MdCheck } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,7 +51,7 @@ async function recordShare(postType: "posts" | "social-posts", id: number) {
   apiPost(
     `/api/${postType}/interactions/${id}/share?shareType=LINK_COPY`,
     {}
-  ).catch(() => {});
+  ).catch(() => { });
 }
 
 function useCopied() {
@@ -61,8 +64,8 @@ function useCopied() {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type PostVariant    = "issue" | "social" | "community" | "government" | "poll";
-export type PostStatus     = "ACTIVE" | "RESOLVED" | "DELETED" | "FLAGGED";
+export type PostVariant = "issue" | "social" | "community" | "government" | "poll";
+export type PostStatus = "ACTIVE" | "RESOLVED" | "DELETED" | "FLAGGED";
 export type BroadcastScope = "AREA" | "DISTRICT" | "STATE" | "COUNTRY";
 
 export type CurrentUser = {
@@ -108,6 +111,7 @@ export type SocialPost = BasePost & {
   isSaved?: boolean;
   isSavedByCurrentUser?: boolean;
   hashtags?: string[];
+  mediaUrls?: string[];
   communityId?: number | null;
   isLikedByCurrentUser?: boolean;
   canEdit?: boolean;
@@ -123,6 +127,7 @@ export type CommunityPost = BasePost & {
   isSaved?: boolean;
   isSavedByCurrentUser?: boolean;
   hashtags?: string[];
+  mediaUrls?: string[];
   isLikedByCurrentUser?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
@@ -223,7 +228,7 @@ function commentPostType(variant: PostVariant): PostType {
 function ActionBtn({
   onClick,
   active = false,
-  activeClass = "bg-primary/15 text-primary",
+  activeClass = "bg-[#1D4ED8]/15 text-[#1D4ED8]",
   disabled = false,
   children,
 }: {
@@ -356,17 +361,17 @@ function PollCard({
     post.votedOptionIds ?? []
   );
   const [hasVoted, setHasVoted] = useState(post.userHasVoted);
-  const [options, setOptions]   = useState<PollOption[]>(post.options);
+  const [options, setOptions] = useState<PollOption[]>(post.options);
   const [totalVotes, setTotalVotes] = useState(post.totalVotes);
-  const [saved, setSaved]       = useState(post.isSaved ?? false);
+  const [saved, setSaved] = useState(post.isSaved ?? false);
   const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
-  const [voting, setVoting]     = useState(false);
+  const [voting, setVoting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { copied, flash }       = useCopied();
+  const { copied, flash } = useCopied();
 
   // Auth: user is logged in if we have a token (Home.tsx doesn't pass currentUser)
-  const isLoggedIn  = !!currentUser || !!(localStorage.getItem("authToken") || localStorage.getItem("token"));
-  const canVote     = !hasVoted && !post.isExpired && isLoggedIn;
+  const isLoggedIn = !!currentUser || !!(localStorage.getItem("authToken") || localStorage.getItem("token"));
+  const canVote = !hasVoted && !post.isExpired && isLoggedIn;
   // Only show results after the user has voted or when poll expired
   const showResults = hasVoted || post.isExpired;
 
@@ -425,7 +430,7 @@ function PollCard({
     onShare?.(post.id);
     await recordShare("social-posts", post.id);
   }
-  
+
   async function handleDelete() {
     if (onDelete) {
       onDelete(post.id);
@@ -440,7 +445,7 @@ function PollCard({
           Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token")}`,
         },
       });
-      window.location.reload(); 
+      window.location.reload();
     } catch (err) {
       console.error("Delete failed", err);
       alert("Failed to delete poll");
@@ -461,20 +466,20 @@ function PollCard({
     <motion.div
       whileHover={{ y: -2 }}
       transition={{ duration: 0.15 }}
-      className="rounded-xl border border-base-300 bg-base-200 p-4"
+      className="h-full rounded-xl border border-base-300 bg-base-200 p-4 flex flex-col"
     >
       {/* Header */}
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         {post.communityId && post.communityName && (
-          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+          <span className="flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
             <Users size={11} /> {post.communityName}
           </span>
         )}
         <span className="font-medium opacity-80 flex items-center gap-1">
           {post.userDisplayName || post.username}
-          <button 
+          <button
             onClick={handleAddUser}
-            className="p-1 hover:bg-primary/10 rounded-full text-primary transition-colors"
+            className="p-1 hover:bg-[#1D4ED8]/10 rounded-full text-[#1D4ED8] transition-colors"
             title="Add User"
           >
             <UserPlus size={14} />
@@ -493,7 +498,7 @@ function PollCard({
           </button>
         )}
         {!post.canDelete && (
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
             <BarChart2 size={11} /> Poll
           </span>
         )}
@@ -512,19 +517,18 @@ function PollCard({
               onClick={() => toggleOption(opt.id)}
               disabled={!canVote}
               className={`relative w-full overflow-hidden rounded-lg border text-left transition-all
-                ${
-                  isSelected && !hasVoted
-                    ? "border-primary ring-1 ring-primary/30"
-                    : isVotedFor
-                    ? "border-primary/60"
+                ${isSelected && !hasVoted
+                  ? "border-[#1D4ED8] ring-1 ring-[#1D4ED8]/30"
+                  : isVotedFor
+                    ? "border-[#1D4ED8]/60"
                     : "border-base-300"
                 }
-                ${canVote ? "cursor-pointer hover:border-primary/60 hover:bg-base-300/30" : "cursor-default"}`}
+                ${canVote ? "cursor-pointer hover:border-[#1D4ED8]/60 hover:bg-base-300/30" : "cursor-default"}`}
             >
               {showResults && (
                 <div
                   className={`absolute inset-y-0 left-0 transition-all duration-500
-                    ${isVotedFor ? "bg-primary/20" : "bg-base-300/50"}`}
+                    ${isVotedFor ? "bg-[#1D4ED8]/20" : "bg-base-300/50"}`}
                   style={{ width: `${opt.percentage}%` }}
                 />
               )}
@@ -533,10 +537,9 @@ function PollCard({
                   {!hasVoted && canVote && (
                     <span
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors
-                        ${
-                          isSelected
-                            ? "border-primary bg-primary"
-                            : "border-base-content/30"
+                        ${isSelected
+                          ? "border-[#1D4ED8] bg-[#1D4ED8]"
+                          : "border-base-content/30"
                         }`}
                     >
                       {isSelected && (
@@ -545,15 +548,14 @@ function PollCard({
                     </span>
                   )}
                   {hasVoted && isVotedFor && (
-                    <MdCheck size={16} className="text-primary shrink-0" />
+                    <MdCheck size={16} className="text-[#1D4ED8] shrink-0" />
                   )}
                   {opt.optionText}
                 </span>
                 {showResults && (
                   <span
-                    className={`font-semibold ${
-                      isVotedFor ? "text-primary" : "opacity-70"
-                    }`}
+                    className={`font-semibold ${isVotedFor ? "text-[#1D4ED8]" : "opacity-70"
+                      }`}
                   >
                     {opt.percentage}%
                   </span>
@@ -568,7 +570,7 @@ function PollCard({
         <button
           onClick={submitVote}
           disabled={voting}
-          className="btn bg-primary text-primary-content font-semibold border-none hover:bg-primary/90 btn-sm mt-3 w-full"
+          className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 btn-sm mt-3 w-full"
         >
           {voting ? "Submitting…" : "Vote"}
         </button>
@@ -588,6 +590,8 @@ function PollCard({
           </span>
         )}
       </div>
+
+      <div className="flex-1" />
 
       {/* Action bar */}
       <div className="mt-2 flex items-center gap-1 text-sm flex-wrap">
@@ -650,16 +654,16 @@ export default function PostCard({
       false
     )
   );
-  const [likeCount, setLikeCount]       = useState(post?.likeCount ?? 0);
+  const [likeCount, setLikeCount] = useState(post?.likeCount ?? 0);
   const [dislikeCount, setDislikeCount] = useState(
     (post as IssuePost)?.dislikeCount ?? 0
   );
-  const [shareCount, setShareCount]     = useState(post?.shareCount ?? 0);
+  const [shareCount, setShareCount] = useState(post?.shareCount ?? 0);
 
   const [resolveOpen, setResolveOpen] = useState(false);
-  const [resolving, setResolving]     = useState(false);
-  const [isDeleting, setIsDeleting]   = useState(false);
-  const { copied, flash }             = useCopied();
+  const [resolving, setResolving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { copied, flash } = useCopied();
 
   // Synchronize state with props when post changes
   useEffect(() => {
@@ -698,10 +702,10 @@ export default function PostCard({
     );
   }
 
-  const isIssue     = post.variant === "issue";
-  const isGovt      = post.variant === "government";
+  const isIssue = post.variant === "issue";
+  const isGovt = post.variant === "government";
   const isCommunity = post.variant === "community";
-  const isSocial    = post.variant === "social";
+  const isSocial = post.variant === "social";
   const interactionType: "posts" | "social-posts" = isIssue
     ? "posts"
     : "social-posts";
@@ -803,7 +807,7 @@ export default function PostCard({
       const ep = isIssue
         ? `/api/posts/${post.id}`
         : `/api/social-posts/${post.id}`;
-      
+
       await fetch(ep, {
         method: "DELETE",
         headers: {
@@ -830,69 +834,140 @@ export default function PostCard({
   const containerClass = isGovt
     ? "overflow-hidden rounded-2xl border border-info/30 bg-info/5 transition-all duration-200"
     : isResolved
-    ? "overflow-hidden rounded-2xl border border-success/25 bg-success/5 transition-all duration-200"
-    : "overflow-hidden rounded-2xl border border-base-300 bg-base-200 transition-all duration-200";
+      ? "overflow-hidden rounded-2xl border border-success/25 bg-success/5 transition-all duration-200"
+      : "overflow-hidden rounded-2xl border border-base-300 bg-base-200 transition-all duration-200";
 
-  const hasMedia = ("mediaUrls" in post && post.mediaUrls && (post.mediaUrls as string[]).length > 0) || 
-                   ("imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0);
+  const allMediaUrls: string[] = (() => {
+    const urls: string[] = [];
+    if ("mediaUrls" in post && Array.isArray(post.mediaUrls)) {
+      urls.push(...(post.mediaUrls as string[]).filter(Boolean));
+    }
+    if (urls.length === 0 && "imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0) {
+      urls.push(post.imageName.startsWith("http") ? post.imageName : `/uploads/posts/${post.imageName}`);
+    }
+    return urls;
+  })();
+  const hasMedia = allMediaUrls.length > 0;
 
-  const imageUrl = ("mediaUrls" in post && post.mediaUrls && (post.mediaUrls as string[]).length > 0)
-    ? (post.mediaUrls as string[])[0]
-    : ("imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0)
-    ? (post.imageName.startsWith("http") ? post.imageName : `/uploads/posts/${post.imageName}`)
-    : null;
+  // Image gallery state
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [imgError, setImgError] = useState<Record<number, boolean>>({});
+
+  function prevImage(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setActiveImageIndex((i) => (i > 0 ? i - 1 : allMediaUrls.length - 1));
+  }
+  function nextImage(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setActiveImageIndex((i) => (i < allMediaUrls.length - 1 ? i + 1 : 0));
+  }
 
   return (
     <>
       <motion.div
         whileHover={{ y: -4 }}
         transition={{ duration: 0.2 }}
-        className={`${containerClass} flex flex-col shadow-sm hover:shadow-md`}
+        className={`${containerClass} h-full flex flex-col shadow-sm hover:shadow-md`}
       >
-        {/* Top 50% - Media */}
-        {hasMedia && imageUrl && (
-          <div className="relative h-64 sm:h-72 w-full overflow-hidden shrink-0 border-b border-base-300/50">
-            <img
-              src={imageUrl}
-              alt="Post content"
-              className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+        {/* ── Media Gallery ── */}
+        {hasMedia && (
+          <div className="relative w-full overflow-hidden shrink-0 border-b border-base-300/50">
+            {/* Main image */}
+            <div
+              className="relative h-64 sm:h-72 cursor-pointer"
+              onClick={() => setLightboxOpen(true)}
+            >
+              {!imgError[activeImageIndex] ? (
+                <img
+                  src={allMediaUrls[activeImageIndex]}
+                  alt={`Post media ${activeImageIndex + 1}`}
+                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
+                  onError={() => setImgError((prev) => ({ ...prev, [activeImageIndex]: true }))}
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center bg-base-300">
+                  <ImageIcon size={48} className="opacity-30" />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-base-100/30 to-transparent pointer-events-none" />
+            </div>
+
+            {/* Nav arrows for multi-image */}
+            {allMediaUrls.length > 1 && (
+              <>
+                <button
+                  onClick={prevImage}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-base-100/70 backdrop-blur-sm text-base-content shadow-md hover:bg-base-100 transition-all"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  onClick={nextImage}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-base-100/70 backdrop-blur-sm text-base-content shadow-md hover:bg-base-100 transition-all"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            )}
+
+            {/* Image counter badge */}
+            {allMediaUrls.length > 1 && (
+              <div className="absolute bottom-3 right-3 rounded-full bg-base-100/70 backdrop-blur-sm px-2.5 py-1 text-xs font-medium text-base-content shadow-sm">
+                {activeImageIndex + 1}/{allMediaUrls.length}
+              </div>
+            )}
+
+            {/* Dot indicators for multi-image */}
+            {allMediaUrls.length > 1 && allMediaUrls.length <= 6 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {allMediaUrls.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={(e) => { e.stopPropagation(); setActiveImageIndex(i); }}
+                    className={`h-2 rounded-full transition-all duration-300 ${i === activeImageIndex
+                        ? "w-5 bg-[#1D4ED8]"
+                        : "w-2 bg-base-content/30 hover:bg-base-content/50"
+                      }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Bottom 50% - Details */}
         <div className="flex flex-1 flex-col p-5">
-        {/* Header */}
-        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-          {isGovt && (
-            <span className="flex items-center gap-1 font-semibold text-info">
-              <BadgeCheck size={16} />
-              {(post as GovernmentPost).department}
-            </span>
-          )}
-          {isCommunity && (
-            <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-              <Users size={11} />
-              {(post as CommunityPost).communityName}
-            </span>
-          )}
-          {!isGovt && (
-            <span className="font-medium opacity-80 flex items-center gap-1">
-              {post.userDisplayName || post.username}
-              <button 
-                onClick={handleAddUser}
-                className="p-1 hover:bg-primary/10 rounded-full text-primary transition-colors"
-                title="Add User"
-              >
-                <UserPlus size={14} />
-              </button>
-            </span>
-          )}
-          <span className="opacity-40">•</span>
-          <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
-          {(isIssue || isSocial || isCommunity) && (post as any).canDelete && (
-             <button
+          {/* Header */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            {isGovt && (
+              <span className="flex items-center gap-1 font-semibold text-info">
+                <BadgeCheck size={16} />
+                {(post as GovernmentPost).department}
+              </span>
+            )}
+            {isCommunity && (
+              <span className="flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
+                <Users size={11} />
+                {(post as CommunityPost).communityName}
+              </span>
+            )}
+            {!isGovt && (
+              <span className="font-medium opacity-80 flex items-center gap-1">
+                {post.userDisplayName || post.username}
+                <button
+                  onClick={handleAddUser}
+                  className="p-1 hover:bg-[#1D4ED8]/10 rounded-full text-[#1D4ED8] transition-colors"
+                  title="Add User"
+                >
+                  <UserPlus size={14} />
+                </button>
+              </span>
+            )}
+            <span className="opacity-40">•</span>
+            <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
+            {(isIssue || isSocial || isCommunity) && (post as any).canDelete && (
+              <button
                 onClick={handleDelete}
                 disabled={isDeleting}
                 className="ml-auto p-1 text-error hover:bg-error/10 rounded-md transition-colors disabled:opacity-50"
@@ -900,164 +975,166 @@ export default function PostCard({
               >
                 <Trash2 size={16} />
               </button>
-          )}
-          {(isIssue || isGovt) && (
-            <>
-              <span className="opacity-40">•</span>
-              <ScopePill
-                scope={
-                  "broadcastScope" in post
-                    ? (post as IssuePost | GovernmentPost).broadcastScope
-                    : undefined
-                }
-                desc={
-                  "broadcastScopeDescription" in post
-                    ? (post as IssuePost | GovernmentPost)
+            )}
+            {(isIssue || isGovt) && (
+              <>
+                <span className="opacity-40">•</span>
+                <ScopePill
+                  scope={
+                    "broadcastScope" in post
+                      ? (post as IssuePost | GovernmentPost).broadcastScope
+                      : undefined
+                  }
+                  desc={
+                    "broadcastScopeDescription" in post
+                      ? (post as IssuePost | GovernmentPost)
                         .broadcastScopeDescription
-                    : undefined
-                }
-              />
-            </>
-          )}
-          {showStatusBadge && (
-            <span className="ml-auto">
-              <StatusBadge status={(post as IssuePost).status} />
-            </span>
-          )}
-        </div>
-
-        {/* Resolve banner */}
-        {govCanResolve && !resolving && (
-          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs">
-            <span className="flex items-center gap-1.5 text-warning">
-              <AlertCircle size={13} />
-              This issue is assigned to your department
-            </span>
-            <button
-              onClick={() => setResolveOpen(true)}
-              className="btn btn-success btn-xs"
-            >
-              <CheckCircle2 size={12} /> Mark Resolved
-            </button>
-          </div>
-        )}
-
-        {/* Resolved notice */}
-        {isResolved && (
-          <div className="mb-3 flex items-center gap-1.5 rounded-lg bg-success/15 px-3 py-2 text-xs font-medium text-success">
-            <CheckCircle2 size={13} />
-            Issue resolved
-            {(post as IssuePost).resolvedAt && (
-              <span className="opacity-70">
-                · {(post as IssuePost).resolvedAt}
+                      : undefined
+                  }
+                />
+              </>
+            )}
+            {showStatusBadge && (
+              <span className="ml-auto">
+                <StatusBadge status={(post as IssuePost).status} />
               </span>
             )}
           </div>
-        )}
 
-        {/* Content */}
-        <p className="mb-3 text-sm leading-relaxed">{post.content}</p>
-
-
-        {/* Tagged depts */}
-        {isIssue && (post as IssuePost).taggedUsernames?.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {(post as IssuePost).taggedUsernames.map((name) => (
-              <span
-                key={name}
-                className="inline-flex items-center gap-1 rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info"
+          {/* Resolve banner */}
+          {govCanResolve && !resolving && (
+            <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs">
+              <span className="flex items-center gap-1.5 text-warning">
+                <AlertCircle size={13} />
+                This issue is assigned to your department
+              </span>
+              <button
+                onClick={() => setResolveOpen(true)}
+                className="btn btn-success btn-xs"
               >
-                <Building2 size={10} /> @{name}
+                <CheckCircle2 size={12} /> Mark Resolved
+              </button>
+            </div>
+          )}
+
+          {/* Resolved notice */}
+          {isResolved && (
+            <div className="mb-3 flex items-center gap-1.5 rounded-lg bg-success/15 px-3 py-2 text-xs font-medium text-success">
+              <CheckCircle2 size={13} />
+              Issue resolved
+              {(post as IssuePost).resolvedAt && (
+                <span className="opacity-70">
+                  · {(post as IssuePost).resolvedAt}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Content */}
+          <p className="mb-3 text-sm leading-relaxed">{post.content}</p>
+
+
+          {/* Tagged depts */}
+          {isIssue && (post as IssuePost).taggedUsernames?.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {(post as IssuePost).taggedUsernames.map((name) => (
+                <span
+                  key={name}
+                  className="inline-flex items-center gap-1 rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info"
+                >
+                  <Building2 size={10} /> @{name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Hashtags */}
+          {(isSocial || isCommunity) &&
+            "hashtags" in post &&
+            (post as SocialPost | CommunityPost).hashtags?.map((tag) => (
+              <span
+                key={tag}
+                className="mr-1.5 inline-block text-xs font-medium text-[#1D4ED8] opacity-80"
+              >
+                {tag}
               </span>
             ))}
-          </div>
-        )}
 
-        {/* Hashtags */}
-        {(isSocial || isCommunity) &&
-          "hashtags" in post &&
-          (post as SocialPost | CommunityPost).hashtags?.map((tag) => (
-            <span
-              key={tag}
-              className="mr-1.5 inline-block text-xs font-medium text-primary opacity-80"
-            >
-              {tag}
-            </span>
-          ))}
+          <div className="flex-1" />
 
-        {/* ── Action bar ── */}
-        <div className="mt-3 flex items-center gap-1 text-sm flex-wrap">
-          {/* Like */}
-          <ActionBtn onClick={handleLike} active={liked} disabled={isResolved}>
-            <ArrowUp size={16} />
-            <span>{likeCount}</span>
-          </ActionBtn>
-
-          {/* Dislike — issues only */}
-          {isIssue && (
-            <ActionBtn
-              onClick={handleDislike}
-              active={disliked}
-              activeClass="bg-error/15 text-error"
-              disabled={isResolved}
-            >
-              <ArrowDown size={16} />
-              <span>{dislikeCount}</span>
+          {/* ── Action bar ── */}
+          <div className="mt-3 flex items-center gap-1 text-sm flex-wrap">
+            {/* Like */}
+            <ActionBtn onClick={handleLike} active={liked} disabled={isResolved}>
+              <ArrowUp size={16} />
+              <span>{likeCount}</span>
             </ActionBtn>
-          )}
 
-          {/* Comment count badge */}
-          <ActionBtn onClick={() => onComment?.(post.id)}>
-            <MessageSquare size={16} />
-            <span>{post.commentCount}</span>
-          </ActionBtn>
+            {/* Dislike — issues only */}
+            {isIssue && (
+              <ActionBtn
+                onClick={handleDislike}
+                active={disliked}
+                activeClass="bg-error/15 text-error"
+                disabled={isResolved}
+              >
+                <ArrowDown size={16} />
+                <span>{dislikeCount}</span>
+              </ActionBtn>
+            )}
 
-          {/* Save — NOT shown for issue posts (backend rule) */}
-          {!isIssue && (
-            <ActionBtn
-              onClick={handleSave}
-              active={saved}
-              activeClass="bg-accent/15 text-accent"
-            >
-              <Bookmark size={16} className={saved ? "fill-current" : ""} />
+            {/* Comment count badge */}
+            <ActionBtn onClick={() => onComment?.(post.id)}>
+              <MessageSquare size={16} />
+              <span>{post.commentCount}</span>
             </ActionBtn>
-          )}
 
-          {/* Share */}
-          <ActionBtn
-            onClick={handleShare}
-            active={copied}
-            activeClass="text-success"
-          >
-            <Share2 size={16} />
-            <span className={copied ? "" : "hidden sm:inline"}>
-              {copied
-                ? "Copied!"
-                : shareCount > 0
-                ? String(shareCount)
-                : "Share"}
-            </span>
-          </ActionBtn>
-        </div>
+            {/* Save — NOT shown for issue posts (backend rule) */}
+            {!isIssue && (
+              <ActionBtn
+                onClick={handleSave}
+                active={saved}
+                activeClass="bg-accent/15 text-accent"
+              >
+                <Bookmark size={16} className={saved ? "fill-current" : ""} />
+              </ActionBtn>
+            )}
 
-        {/* ── Comment Section ── */}
-        {/* Issue → /api/comments/post/{id}          */}
-        {/* Others → /api/comments/social-posts/{id} */}
-        {/* Resolved issue posts cannot receive new comments */}
-        {isIssue && isResolved ? (
-          <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-base-300/50 px-3 py-2 text-xs opacity-50">
-            <MessageSquare size={12} />
-            Comments are closed — this issue has been resolved.
+            {/* Share */}
+            <ActionBtn
+              onClick={handleShare}
+              active={copied}
+              activeClass="text-success"
+            >
+              <Share2 size={16} />
+              <span className={copied ? "" : "hidden sm:inline"}>
+                {copied
+                  ? "Copied!"
+                  : shareCount > 0
+                    ? String(shareCount)
+                    : "Share"}
+              </span>
+            </ActionBtn>
           </div>
-        ) : (
-          <CommentSection
-            postId={post.id}
-            postType={commentPostType(post.variant)}
-            commentCount={post.commentCount}
-            currentUsername={currentUser?.username}
-            currentRole={currentUser?.role}
-          />
-        )}
+
+          {/* ── Comment Section ── */}
+          {/* Issue → /api/comments/post/{id}          */}
+          {/* Others → /api/comments/social-posts/{id} */}
+          {/* Resolved issue posts cannot receive new comments */}
+          {isIssue && isResolved ? (
+            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-base-300/50 px-3 py-2 text-xs opacity-50">
+              <MessageSquare size={12} />
+              Comments are closed — this issue has been resolved.
+            </div>
+          ) : (
+            <CommentSection
+              postId={post.id}
+              postType={commentPostType(post.variant)}
+              commentCount={post.commentCount}
+              currentUsername={currentUser?.username}
+              currentRole={currentUser?.role}
+            />
+          )}
         </div>
       </motion.div>
 
@@ -1066,6 +1143,65 @@ export default function PostCard({
         onClose={() => setResolveOpen(false)}
         onConfirm={handleResolveConfirm}
       />
+
+      {/* ── Image Lightbox ── */}
+      <AnimatePresence>
+        {lightboxOpen && hasMedia && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-base-100/90 backdrop-blur-md"
+            onClick={() => setLightboxOpen(false)}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxOpen(false)}
+              className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-base-200 text-base-content shadow-lg hover:bg-base-300 transition-colors z-10"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Counter */}
+            {allMediaUrls.length > 1 && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-base-200 px-4 py-1.5 text-sm font-medium text-base-content shadow-lg z-10">
+                {activeImageIndex + 1} / {allMediaUrls.length}
+              </div>
+            )}
+
+            {/* Main image */}
+            <motion.img
+              key={activeImageIndex}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              src={allMediaUrls[activeImageIndex]}
+              alt={`Post media ${activeImageIndex + 1}`}
+              className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Nav arrows */}
+            {allMediaUrls.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content shadow-lg hover:bg-base-300 transition-colors"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-base-200 text-base-content shadow-lg hover:bg-base-300 transition-colors"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

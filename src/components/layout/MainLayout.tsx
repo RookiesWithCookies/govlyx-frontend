@@ -23,23 +23,23 @@ const MainLayout = () => {
 
           {/* Layout area BELOW navbar */}
           <div className="pt-14 h-[calc(100vh-3.5rem)]">
-            <div className="mx-auto max-w-[1460px] px-4 h-full">
+            <div className="mx-auto max-w-[1780px] px-4 h-full">
               <div className="grid grid-cols-12 gap-4 mt-3 h-full">
 
                 {/* LEFT SIDEBAR */}
-                <aside className="hidden lg:block lg:col-span-3 h-full">
+                <aside className="hidden lg:block lg:col-span-2 h-full">
                   <div className="h-full overflow-y-auto">
                     <SidebarLeft />
                   </div>
                 </aside>
 
                 {/* CENTER */}
-                <main className="col-span-12 lg:col-span-6 h-full overflow-y-auto">
+                <main className="col-span-12 lg:col-span-10 xl:col-span-8 h-full overflow-y-auto">
                   <Outlet />
                 </main>
 
                 {/* RIGHT SIDEBAR */}
-                <aside className="hidden xl:block xl:col-span-3 h-full">
+                <aside className="hidden xl:block xl:col-span-2 h-full">
                   <div className="h-full overflow-y-auto">
                     <SidebarRight />
                   </div>

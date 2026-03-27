@@ -81,7 +81,7 @@ async function handleShareAction(
   apiPost(
     `/api/${postType}/interactions/${id}/share?shareType=LINK_COPY`,
     {}
-  ).catch(() => {});
+  ).catch(() => { });
 }
 
 function useCopiedToast() {
@@ -223,7 +223,7 @@ type CurrentUserInfo = {
 function ActionBtn({
   onClick,
   active = false,
-  activeClass = "bg-primary/15 text-primary",
+  activeClass = "bg-[#1D4ED8]/15 text-[#1D4ED8]",
   disabled = false,
   children,
 }: {
@@ -268,13 +268,13 @@ function IssuePostCard({
   currentUser?: CurrentUserInfo;
   onDelete?: (id: number) => void;
 }) {
-  const [liked, setLiked]               = useState(!!post.isLikedByCurrentUser);
-  const [disliked, setDisliked]         = useState(!!post.isDislikedByCurrentUser);
-  const [saved, setSaved]               = useState(!!post.isSaved);
-  const [likeCount, setLikeCount]       = useState(post.likeCount ?? 0);
+  const [liked, setLiked] = useState(!!post.isLikedByCurrentUser);
+  const [disliked, setDisliked] = useState(!!post.isDislikedByCurrentUser);
+  const [saved, setSaved] = useState(!!post.isSaved);
+  const [likeCount, setLikeCount] = useState(post.likeCount ?? 0);
   const [dislikeCount, setDislikeCount] = useState(post.dislikeCount ?? 0);
-  const [shareCount, setShareCount]     = useState(post.shareCount ?? 0);
-  const { copied, flash }               = useCopiedToast();
+  const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
+  const { copied, flash } = useCopiedToast();
   const isResolved = post.status === "RESOLVED";
 
   async function handleLike() {
@@ -307,7 +307,7 @@ function IssuePostCard({
     if (isResolved) return;
     alert("Dislike feature coming soon!");
   }
-  
+
   async function handleSave() {
     const prevSaved = saved;
     const nextSaved = !prevSaved;
@@ -318,8 +318,8 @@ function IssuePostCard({
       if (data && typeof data.isSaved === "boolean") {
         setSaved(data.isSaved);
       }
-    } catch { 
-      setSaved(prevSaved); 
+    } catch {
+      setSaved(prevSaved);
     }
   }
 
@@ -334,18 +334,17 @@ function IssuePostCard({
       {/* Status + time */}
       <div className="flex items-center justify-between">
         <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-            isResolved
+          className={`text-xs font-medium px-2 py-0.5 rounded-full ${isResolved
               ? "bg-green-100 text-green-700"
               : "bg-yellow-100 text-yellow-700"
-          }`}
+            }`}
         >
           {isResolved ? "✓ Resolved" : "● Active"}
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
           {post.canDelete && (
-            <button 
+            <button
               onClick={() => onDelete?.(post.id)}
               className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
               title="Delete issue"
@@ -424,9 +423,9 @@ function GovernmentBroadcastCard({
   currentUser?: CurrentUserInfo;
   onDelete?: (id: number) => void;
 }) {
-  const [saved, setSaved]           = useState(!!post.isSavedByCurrentUser);
+  const [saved, setSaved] = useState(!!post.isSavedByCurrentUser);
   const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
-  const { copied, flash }           = useCopiedToast();
+  const { copied, flash } = useCopiedToast();
 
   async function handleSave() {
     const prevSaved = saved;
@@ -473,7 +472,7 @@ function GovernmentBroadcastCard({
         <div className="flex items-center gap-2">
           <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
           {post.canDelete && (
-            <button 
+            <button
               onClick={() => onDelete?.(post.id)}
               className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
               title="Delete broadcast"
@@ -530,16 +529,16 @@ function PollCard({
   onDelete?: (id: number) => void;
 }) {
   const p = post.poll!;
-  const [options, setOptions]       = useState<PollOptionDto[]>(p.options ?? []);
+  const [options, setOptions] = useState<PollOptionDto[]>(p.options ?? []);
   const [totalVotes, setTotalVotes] = useState(p.totalVotes);
-  const [hasVoted, setHasVoted]     = useState(p.userHasVoted);
-  const [selected, setSelected]     = useState<number[]>(p.votedOptionIds ?? []);
-  const [voting, setVoting]         = useState(false);
-  const [saved, setSaved]           = useState(!!post.isSavedByCurrentUser);
+  const [hasVoted, setHasVoted] = useState(p.userHasVoted);
+  const [selected, setSelected] = useState<number[]>(p.votedOptionIds ?? []);
+  const [voting, setVoting] = useState(false);
+  const [saved, setSaved] = useState(!!post.isSavedByCurrentUser);
   const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
-  const { copied, flash }           = useCopiedToast();
+  const { copied, flash } = useCopiedToast();
 
-  const canVote     = !hasVoted && !p.isExpired;
+  const canVote = !hasVoted && !p.isExpired;
   const showResults = hasVoted || p.showResults || p.isExpired;
 
   function toggle(id: number) {
@@ -599,13 +598,13 @@ function PollCard({
   return (
     <div className="rounded-xl bg-base-200 p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#1D4ED8]">
           <BarChart2 size={13} /> Poll
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
           {post.canDelete && (
-            <button 
+            <button
               onClick={() => onDelete?.(post.id)}
               className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
               title="Delete poll"
@@ -628,13 +627,13 @@ function PollCard({
               onClick={() => toggle(opt.id)}
               disabled={!canVote}
               className={`relative w-full overflow-hidden rounded-lg border text-left transition-colors
-                ${isSelected && !hasVoted ? "border-primary ring-1 ring-primary/30" : isVotedFor ? "border-primary/60" : "border-base-300"}
-                ${canVote ? "cursor-pointer hover:border-primary/60 hover:bg-base-300/30" : "cursor-default"}`}
+                ${isSelected && !hasVoted ? "border-[#1D4ED8] ring-1 ring-[#1D4ED8]/30" : isVotedFor ? "border-[#1D4ED8]/60" : "border-base-300"}
+                ${canVote ? "cursor-pointer hover:border-[#1D4ED8]/60 hover:bg-base-300/30" : "cursor-default"}`}
             >
               {showResults && (
                 <div
                   className={`absolute left-0 top-0 h-full transition-all duration-500
-                    ${isVotedFor ? "bg-primary/20" : "bg-base-300/50"}`}
+                    ${isVotedFor ? "bg-[#1D4ED8]/20" : "bg-base-300/50"}`}
                   style={{ width: `${opt.percentage}%` }}
                 />
               )}
@@ -643,7 +642,7 @@ function PollCard({
                   {canVote && (
                     <span
                       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2
-                        ${isSelected ? "border-primary bg-primary" : "border-base-content/30"}`}
+                        ${isSelected ? "border-[#1D4ED8] bg-[#1D4ED8]" : "border-base-content/30"}`}
                     >
                       {isSelected && (
                         <span className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -653,7 +652,7 @@ function PollCard({
                   {opt.optionText}
                 </span>
                 {showResults && (
-                  <span className={`font-semibold ${isVotedFor ? "text-primary" : "opacity-60"}`}>
+                  <span className={`font-semibold ${isVotedFor ? "text-[#1D4ED8]" : "opacity-60"}`}>
                     {opt.percentage}%
                   </span>
                 )}
@@ -664,7 +663,7 @@ function PollCard({
       </div>
 
       {canVote && selected.length > 0 && (
-        <button onClick={submitVote} disabled={voting} className="btn bg-primary text-primary-content font-semibold border-none hover:bg-primary/90 btn-sm w-full">
+        <button onClick={submitVote} disabled={voting} className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 btn-sm w-full">
           {voting ? "Submitting…" : "Vote"}
         </button>
       )}
@@ -684,7 +683,7 @@ function PollCard({
           onClick={handleSave}
           active={saved}
           activeClass="bg-accent/15 text-accent"
-          
+
         >
           <Bookmark size={13} className={saved ? "fill-current" : ""} />
         </ActionBtn>
@@ -723,11 +722,11 @@ function SocialPostCard({
   if (post.variant === "poll" && post.poll) return <PollCard post={post} currentUser={currentUser} onDelete={onDelete} />;
   if (post.variant === "government") return <GovernmentBroadcastCard post={post} currentUser={currentUser} onDelete={onDelete} />;
 
-  const [liked, setLiked]           = useState(!!post.isLikedByCurrentUser);
-  const [saved, setSaved]           = useState(!!post.isSavedByCurrentUser);
-  const [likeCount, setLikeCount]   = useState(post.likeCount ?? 0);
+  const [liked, setLiked] = useState(!!post.isLikedByCurrentUser);
+  const [saved, setSaved] = useState(!!post.isSavedByCurrentUser);
+  const [likeCount, setLikeCount] = useState(post.likeCount ?? 0);
   const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
-  const { copied, flash }           = useCopiedToast();
+  const { copied, flash } = useCopiedToast();
 
   async function handleLike() {
     const next = !liked;
@@ -776,7 +775,7 @@ function SocialPostCard({
         <div className="flex items-center gap-2">
           <span className="text-xs opacity-50">{timeAgo(post.createdAt)}</span>
           {post.canDelete && (
-            <button 
+            <button
               onClick={() => onDelete?.(post.id)}
               className="text-error opacity-60 hover:opacity-100 p-1 transition-opacity"
               title="Delete post"
@@ -803,7 +802,7 @@ function SocialPostCard({
       {post.hashtags && post.hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {post.hashtags.map((tag) => (
-            <span key={tag} className="text-xs text-primary opacity-80">{tag}</span>
+            <span key={tag} className="text-xs text-[#1D4ED8] opacity-80">{tag}</span>
           ))}
         </div>
       )}
@@ -850,7 +849,7 @@ function ActivityIcon({ type }: { type: ActivityItem["icon"] }) {
     );
   if (type === "comment")
     return (
-      <div className={`${cls} bg-primary/15 text-primary`}>
+      <div className={`${cls} bg-[#1D4ED8]/15 text-[#1D4ED8]`}>
         <MessageSquare size={13} />
       </div>
     );
@@ -865,7 +864,7 @@ function ActivityIcon({ type }: { type: ActivityItem["icon"] }) {
 // Profile page
 // ═══════════════════════════════════════════════════════════════════════════════
 const Profile = () => {
-  const [tab, setTab]               = useState<Tab>("posts");
+  const [tab, setTab] = useState<Tab>("posts");
   const [postFilter, setPostFilter] = useState<PostFilter>("all");
 
   async function handleDelete(type: 'posts' | 'social-posts', id: number) {
@@ -887,24 +886,24 @@ const Profile = () => {
     }
   }
 
-  const [username, setUsername]         = useState<string>("...");
+  const [username, setUsername] = useState<string>("...");
   const [avatarLetter, setAvatarLetter] = useState("U");
-  const [memberSince, setMemberSince]   = useState("");
-  const [location, setLocation]         = useState("India");
-  const [currentUser, setCurrentUser]   = useState<CurrentUserInfo | undefined>();
+  const [memberSince, setMemberSince] = useState("");
+  const [location, setLocation] = useState("India");
+  const [currentUser, setCurrentUser] = useState<CurrentUserInfo | undefined>();
 
-  const [issueCount, setIssueCount]         = useState<number>(0);
-  const [socialCount, setSocialCount]       = useState<number>(0);
+  const [issueCount, setIssueCount] = useState<number>(0);
+  const [socialCount, setSocialCount] = useState<number>(0);
   const [communityCount, setCommunityCount] = useState<number>(0);
 
-  const [allPosts, setAllPosts]           = useState<IssuePost[]>([]);
-  const [activePosts, setActivePosts]     = useState<IssuePost[]>([]);
+  const [allPosts, setAllPosts] = useState<IssuePost[]>([]);
+  const [activePosts, setActivePosts] = useState<IssuePost[]>([]);
   const [resolvedPosts, setResolvedPosts] = useState<IssuePost[]>([]);
-  const [socialPosts, setSocialPosts]     = useState<SocialPost[]>([]);
-  const [activity, setActivity]           = useState<ActivityItem[]>([]);
+  const [socialPosts, setSocialPosts] = useState<SocialPost[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
 
-  const [loadingPosts, setLoadingPosts]       = useState(false);
-  const [loadingSocial, setLoadingSocial]     = useState(false);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [loadingSocial, setLoadingSocial] = useState(false);
   const [loadingActivity, setLoadingActivity] = useState(false);
 
   // Fetch user profile
@@ -926,7 +925,7 @@ const Profile = () => {
           role: u.role ?? "ROLE_USER",
         });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Fetch counts + pre-populate lists
@@ -937,7 +936,7 @@ const Profile = () => {
         setAllPosts(posts);
         setIssueCount(posts.length);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     apiFetch("/api/social-posts/my-posts?limit=100")
       .then((b) => {
@@ -972,11 +971,11 @@ const Profile = () => {
         setSocialCount(posts.length);
         setSocialPosts(posts);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     apiFetch("/api/communities/me?limit=100")
       .then((b) => setCommunityCount(b?.data?.content?.length ?? 0))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Fetch issue filter data on demand
@@ -998,7 +997,7 @@ const Profile = () => {
         if (postFilter === "active") setActivePosts(posts);
         if (postFilter === "resolved") setResolvedPosts(posts);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingPosts(false));
   }, [tab, postFilter]);
 
@@ -1009,7 +1008,7 @@ const Profile = () => {
     setLoadingSocial(true);
     apiFetch("/api/social-posts/my-posts?limit=50")
       .then((b) => setSocialPosts(b?.data?.content ?? []))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingSocial(false));
   }, [tab]);
 
@@ -1071,21 +1070,21 @@ const Profile = () => {
     postFilter === "active"
       ? activePosts
       : postFilter === "resolved"
-      ? resolvedPosts
-      : allPosts;
+        ? resolvedPosts
+        : allPosts;
 
   return (
     <div className="space-y-4">
       {/* Profile Header */}
       <div className="rounded-xl border border-base-300 bg-base-200 p-4">
         <div className="flex items-center gap-4">
-          <div className="h-14 w-14 rounded-full bg-primary flex items-center justify-center text-primary-content font-bold text-2xl">
+          <div className="h-14 w-14 rounded-full bg-[#1D4ED8] flex items-center justify-center text-white font-bold text-2xl">
             {avatarLetter}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="font-semibold text-lg">{username}</h1>
-              <ShieldCheck size={16} className="text-primary" />
+              <ShieldCheck size={16} className="text-[#1D4ED8]" />
             </div>
             <p className="text-sm opacity-70">
               {memberSince ? `Member since ${memberSince}` : "Loading…"} •{" "}
@@ -1097,9 +1096,9 @@ const Profile = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard value={issueCount}     label="Issues"       />
-        <StatCard value={socialCount}    label="Social Posts" />
-        <StatCard value={communityCount} label="Communities"  />
+        <StatCard value={issueCount} label="Issues" />
+        <StatCard value={socialCount} label="Social Posts" />
+        <StatCard value={communityCount} label="Communities" />
       </div>
 
       {/* Tabs */}
@@ -1113,15 +1112,14 @@ const Profile = () => {
               <button
                 key={f}
                 onClick={() => setPostFilter(f)}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition ${
-                  postFilter === f
-                    ? "bg-primary text-primary-content border-primary"
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition ${postFilter === f
+                    ? "bg-[#1D4ED8] text-white border-[#1D4ED8]"
                     : "border-base-300 hover:border-blue-400"
-                }`}
+                  }`}
               >
-                {f === "active"   && <Clock size={11} />}
+                {f === "active" && <Clock size={11} />}
                 {f === "resolved" && <CheckCircle size={11} />}
-                {f === "all"      && <FileText size={11} />}
+                {f === "all" && <FileText size={11} />}
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}

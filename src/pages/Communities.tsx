@@ -2,16 +2,16 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { FiSearch } from "react-icons/fi";
 import { HiOutlineArrowRight, HiOutlineArrowLeft } from "react-icons/hi";
 import { useNavigate, useParams } from "react-router-dom";
-import { 
-  Building2, Construction, GraduationCap, Stethoscope, Leaf, 
-  Laptop, Trophy, Palette, Briefcase, HardHat, ShieldCheck, 
-  Globe, Lock, EyeOff, Users, Mail, ClipboardCheck, 
-  CheckCircle2, AlertTriangle, Inbox, Settings, BarChart3, 
-  X, Crown, Shield, User, VolumeX, Volume2, Ban, Trash2, 
-  Save, Archive, Pencil, Heart, MessageSquare, Calendar, 
-  Tag, MapPin, Rocket, PartyPopper, Plus, ChevronLeft, 
+import {
+  Building2, Construction, GraduationCap, Stethoscope, Leaf,
+  Laptop, Trophy, Palette, Briefcase, HardHat, ShieldCheck,
+  Globe, Lock, EyeOff, Users, Mail, ClipboardCheck,
+  CheckCircle2, AlertTriangle, Inbox, Settings, BarChart3,
+  X, Crown, Shield, User, VolumeX, Volume2, Ban, Trash2,
+  Save, Archive, Pencil, Heart, MessageSquare, Calendar,
+  Tag, MapPin, Rocket, PartyPopper, Plus, ChevronLeft,
   XCircle, Home, Link, Eye, Image as ImageIcon, RefreshCw,
-  SearchAlertIcon
+  SearchAlertIcon, Activity, Radio, FileText, Sparkles
 } from "lucide-react";
 import CommunityCard from "../components/community/CommunityCard";
 import CommunityHeader from "../components/community/CommunityHeader";
@@ -178,32 +178,32 @@ interface UserSearchResult {
 
 /* ─── constants ──────────────────────────────────────────────────────────── */
 const CATS = [
-  "LOCAL_GOVERNANCE","CIVIC_ISSUES","EDUCATION","HEALTH","ENVIRONMENT",
-  "TECHNOLOGY","SPORTS","CULTURE","EMPLOYMENT","INFRASTRUCTURE","SAFETY","OTHER",
+  "LOCAL_GOVERNANCE", "CIVIC_ISSUES", "EDUCATION", "HEALTH", "ENVIRONMENT",
+  "TECHNOLOGY", "SPORTS", "CULTURE", "EMPLOYMENT", "INFRASTRUCTURE", "SAFETY", "OTHER",
 ];
 const CAT_ICON: Record<string, React.ReactNode> = {
   LOCAL_GOVERNANCE: <Building2 size={18} />,
-  CIVIC_ISSUES:     <Construction size={18} />,
-  EDUCATION:        <GraduationCap size={18} />,
-  HEALTH:           <Stethoscope size={18} />,
-  ENVIRONMENT:      <Leaf size={18} />,
-  TECHNOLOGY:       <Laptop size={18} />,
-  SPORTS:           <Trophy size={18} />,
-  CULTURE:          <Palette size={18} />,
-  EMPLOYMENT:       <Briefcase size={18} />,
-  INFRASTRUCTURE:   <HardHat size={18} />,
-  SAFETY:           <ShieldCheck size={18} />,
-  OTHER:            <Globe size={18} />,
+  CIVIC_ISSUES: <Construction size={18} />,
+  EDUCATION: <GraduationCap size={18} />,
+  HEALTH: <Stethoscope size={18} />,
+  ENVIRONMENT: <Leaf size={18} />,
+  TECHNOLOGY: <Laptop size={18} />,
+  SPORTS: <Trophy size={18} />,
+  CULTURE: <Palette size={18} />,
+  EMPLOYMENT: <Briefcase size={18} />,
+  INFRASTRUCTURE: <HardHat size={18} />,
+  SAFETY: <ShieldCheck size={18} />,
+  OTHER: <Globe size={18} />,
 };
-const PRIV_ICON: Record<string, React.ReactNode> = { 
-  PUBLIC:  <Globe size={18} />, 
-  PRIVATE: <Lock size={18} />, 
-  SECRET:  <EyeOff size={18} /> 
+const PRIV_ICON: Record<string, React.ReactNode> = {
+  PUBLIC: <Globe size={18} />,
+  PRIVATE: <Lock size={18} />,
+  SECRET: <EyeOff size={18} />
 };
-const PRIV_DESC  = {
-  PUBLIC:  "Anyone can join instantly",
+const PRIV_DESC = {
+  PUBLIC: "Anyone can join instantly",
   PRIVATE: "Requires moderator approval",
-  SECRET:  "Invite only — not discoverable",
+  SECRET: "Invite only — not discoverable",
 };
 
 const Spin = ({ xs }: { xs?: boolean }) => (
@@ -278,28 +278,28 @@ function InviteTab({
   const [mode, setMode] = useState<Mode>("send");
 
   /* ── send-form state ─────────────────────────────────────────────────── */
-  const [searchQ, setSearchQ]             = useState("");
-  const [suggestions, setSuggestions]     = useState<UserSearchResult[]>([]);
-  const [sugLoading, setSugLoading]       = useState(false);
-  const [selectedUser, setSelectedUser]   = useState<UserSearchResult | null>(null);
-  const [message, setMessage]             = useState("");
-  const [sending, setSending]             = useState(false);
-  const [sendResult, setSendResult]       = useState<InviteResponse | null>(null);
-  const [sendError, setSendError]         = useState<string | null>(null);
-  const [copiedSend, setCopiedSend]       = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [suggestions, setSuggestions] = useState<UserSearchResult[]>([]);
+  const [sugLoading, setSugLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<InviteResponse | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [copiedSend, setCopiedSend] = useState(false);
   const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── link-generate state ─────────────────────────────────────────────── */
-  const [genLoading, setGenLoading]       = useState(false);
-  const [genResult, setGenResult]         = useState<InviteResponse | null>(null);
-  const [copiedGen, setCopiedGen]         = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [genResult, setGenResult] = useState<InviteResponse | null>(null);
+  const [copiedGen, setCopiedGen] = useState(false);
 
   /* ── pending invites list state ──────────────────────────────────────── */
-  const [invites, setInvites]             = useState<InviteResponse[]>([]);
-  const [listLoading, setListLoading]     = useState(false);
-  const [hasMore, setHasMore]             = useState(false);
-  const [cursor, setCursor]               = useState<number | null>(null);
-  const [revoking, setRevoking]           = useState<number | null>(null);
+  const [invites, setInvites] = useState<InviteResponse[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [revoking, setRevoking] = useState<number | null>(null);
 
   /* ── user typeahead ──────────────────────────────────────────────────── */
   useEffect(() => {
@@ -400,11 +400,10 @@ function InviteTab({
     <div className="p-4 space-y-4">
 
       {/* Context banner */}
-      <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${
-        isSecret
+      <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${isSecret
           ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
           : "bg-orange-500/10 border-orange-500/30 text-orange-400"
-      }`}>
+        }`}>
         <span className="text-xl shrink-0 mt-0.5">{isSecret ? <EyeOff size={20} /> : <Lock size={20} />}</span>
         <div>
           <p className="font-semibold">{isSecret ? "Secret Community" : "Private Community"}</p>
@@ -605,7 +604,7 @@ function InviteTab({
                       className="btn btn-success btn-sm w-full gap-2"
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/>
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347" />
                       </svg>
                       Share via WhatsApp
                     </a>
@@ -676,10 +675,10 @@ function InviteRow({
   const [copied, setCopied] = useState(false);
 
   const statusColor: Record<InviteResponse["status"], string> = {
-    PENDING:  "badge-warning",
+    PENDING: "badge-warning",
     ACCEPTED: "badge-success",
-    EXPIRED:  "badge-ghost",
-    REVOKED:  "badge-error",
+    EXPIRED: "badge-ghost",
+    REVOKED: "badge-error",
   };
 
   return (
@@ -704,7 +703,7 @@ function InviteRow({
           <div className="flex items-center gap-2 text-xs opacity-40 mt-0.5">
             <span>Sent {relTime(invite.createdAt)}</span>
             {invite.expiresAt && (
-              <span>· Expires {new Date(invite.expiresAt).toLocaleDateString("en-IN", { day:"numeric", month:"short" })}</span>
+              <span>· Expires {new Date(invite.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
             )}
           </div>
         </div>
@@ -748,11 +747,11 @@ export function AcceptInvitePage() {
   const navigate = useNavigate();
 
   type PageStatus = "idle" | "loading" | "success" | "already" | "error";
-  const [status, setStatus]               = useState<PageStatus>("idle");
-  const [preview, setPreview]             = useState<InvitePreviewResponse | null>(null);
+  const [status, setStatus] = useState<PageStatus>("idle");
+  const [preview, setPreview] = useState<InvitePreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
-  const [errorMsg, setErrorMsg]           = useState("");
-  const [accepted, setAccepted]           = useState<AcceptInviteResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [accepted, setAccepted] = useState<AcceptInviteResponse | null>(null);
 
   /* ── Load preview (public — no auth needed) ── */
   useEffect(() => {
@@ -809,7 +808,7 @@ export function AcceptInvitePage() {
       <div className="w-full max-w-sm bg-base-100 rounded-3xl border border-base-300 shadow-2xl overflow-hidden">
 
         {/* Gradient header */}
-        <div className="h-24 bg-gradient-to-br from-primary/30 via-primary/10 to-base-200 flex items-center justify-center">
+        <div className="h-24 bg-gradient-to-br from-[#1D4ED8]/30 via-[#1D4ED8]/10 to-base-200 flex items-center justify-center">
           <Home size={48} className="text-blue-700" />
         </div>
 
@@ -947,14 +946,14 @@ function AdminPanel({
   onCommunityUpdated: (c: CommunityData) => void;
 }) {
   const [tab, setTab] = useState<AdminTab>("requests");
-  const [c, setC]     = useState(community);
+  const [c, setC] = useState(community);
 
   /* ── join requests ── */
-  const [requests, setRequests]       = useState<JoinRequest[]>([]);
-  const [reqLoading, setReqLoading]   = useState(false);
-  const [reqCursor, setReqCursor]     = useState<number | null>(null);
-  const [reqHasMore, setReqHasMore]   = useState(false);
-  const [actingReq, setActingReq]     = useState<number | null>(null);
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const [reqLoading, setReqLoading] = useState(false);
+  const [reqCursor, setReqCursor] = useState<number | null>(null);
+  const [reqHasMore, setReqHasMore] = useState(false);
+  const [actingReq, setActingReq] = useState<number | null>(null);
 
   const loadRequests = useCallback(async (cur: number | null, replace: boolean) => {
     setReqLoading(true);
@@ -988,12 +987,12 @@ function AdminPanel({
   }
 
   /* ── members ── */
-  const [members, setMembers]         = useState<Member[]>([]);
-  const [memLoading, setMemLoading]   = useState(false);
-  const [memCursor, setMemCursor]     = useState<number | null>(null);
-  const [memHasMore, setMemHasMore]   = useState(false);
-  const [actingMem, setActingMem]     = useState<number | null>(null);
-  const [memSearch, setMemSearch]     = useState("");
+  const [members, setMembers] = useState<Member[]>([]);
+  const [memLoading, setMemLoading] = useState(false);
+  const [memCursor, setMemCursor] = useState<number | null>(null);
+  const [memHasMore, setMemHasMore] = useState(false);
+  const [actingMem, setActingMem] = useState<number | null>(null);
+  const [memSearch, setMemSearch] = useState("");
 
   const loadMembers = useCallback(async (cur: number | null, replace: boolean) => {
     setMemLoading(true);
@@ -1045,11 +1044,11 @@ function AdminPanel({
       } else {
         setMembers(p => p.map(m => {
           if (m.userId !== userId) return m;
-          if (action === "mute")       return { ...m, isMuted: true };
-          if (action === "unmute")     return { ...m, isMuted: false };
-          if (action === "unban")      return { ...m, isBanned: false };
-          if (action === "makeAdmin")  return { ...m, role: "ADMIN" as const };
-          if (action === "makeMod")    return { ...m, role: "MODERATOR" as const };
+          if (action === "mute") return { ...m, isMuted: true };
+          if (action === "unmute") return { ...m, isMuted: false };
+          if (action === "unban") return { ...m, isBanned: false };
+          if (action === "makeAdmin") return { ...m, role: "ADMIN" as const };
+          if (action === "makeMod") return { ...m, role: "MODERATOR" as const };
           if (action === "makeMember") return { ...m, role: "MEMBER" as const };
           return m;
         }));
@@ -1060,17 +1059,17 @@ function AdminPanel({
 
   /* ── settings ── */
   const [settingsForm, setSettingsForm] = useState({
-    name:                c.name,
-    description:         c.description,
-    privacy:             c.privacy,
-    avatarUrl:           c.avatarUrl || "",
-    allowMemberPosts:    c.allowMemberPosts    ?? true,
+    name: c.name,
+    description: c.description,
+    privacy: c.privacy,
+    avatarUrl: c.avatarUrl || "",
+    allowMemberPosts: c.allowMemberPosts ?? true,
     requirePostApproval: c.requirePostApproval ?? false,
-    feedEligible:        c.feedEligible        ?? false,
+    feedEligible: c.feedEligible ?? false,
   });
   const [settingsBusy, setSettingsBusy] = useState(false);
-  const [settingsMsg,  setSettingsMsg]  = useState<string | null>(null);
-  const [archiveBusy,  setArchiveBusy]  = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
 
   async function saveSettings() {
     setSettingsBusy(true); setSettingsMsg(null);
@@ -1079,7 +1078,7 @@ function AdminPanel({
         method: "PUT", headers: hdrs(), body: JSON.stringify(settingsForm),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); setSettingsMsg("❌ " + (d?.message || "Save failed.")); return; }
-      const d   = await res.json();
+      const d = await res.json();
       const raw = d?.data ?? d;
       const updated: CommunityData = { ...c, ...raw, isOwner: true, isMember: true };
       setC(updated); onCommunityUpdated(updated);
@@ -1100,9 +1099,9 @@ function AdminPanel({
   }
 
   /* ── health insights ── */
-  const [insights, setInsights]             = useState<HealthInsight | null>(null);
+  const [insights, setInsights] = useState<HealthInsight | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
-  const [recalcBusy, setRecalcBusy]         = useState(false);
+  const [recalcBusy, setRecalcBusy] = useState(false);
 
   const loadInsights = useCallback(async () => {
     setInsightsLoading(true);
@@ -1127,7 +1126,7 @@ function AdminPanel({
   /* ── tab load trigger ── */
   useEffect(() => {
     if (tab === "requests") loadRequests(null, true);
-    if (tab === "members")  loadMembers(null, true);
+    if (tab === "members") loadMembers(null, true);
     if (tab === "insights") loadInsights();
     // "invites" and "settings" load their own data internally
   }, [tab]);
@@ -1139,7 +1138,7 @@ function AdminPanel({
   // Build tab list — invites only shown for PRIVATE and SECRET
   const TABS: { key: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { key: "requests", label: "Requests", icon: <Inbox size={14} />, badge: requests.length > 0 ? requests.length : undefined },
-    { key: "members",  label: "Members",  icon: <Users size={14} /> },
+    { key: "members", label: "Members", icon: <Users size={14} /> },
     ...(c.privacy !== "PUBLIC"
       ? [{ key: "invites" as AdminTab, label: "Invites", icon: <Link size={14} /> }]
       : []
@@ -1149,7 +1148,7 @@ function AdminPanel({
   ];
 
   const roleColor = (role: Member["role"]) => {
-    if (role === "ADMIN")     return "badge-error";
+    if (role === "ADMIN") return "badge-error";
     if (role === "MODERATOR") return "badge-warning";
     return "badge-ghost";
   };
@@ -1184,9 +1183,8 @@ function AdminPanel({
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`relative flex-1 btn btn-xs rounded-lg gap-1 transition-all ${
-                  tab === t.key ? "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800" : "btn-ghost opacity-60 hover:opacity-100"
-                }`}
+                className={`relative flex-1 btn btn-xs rounded-lg gap-1 transition-all ${tab === t.key ? "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800" : "btn-ghost opacity-60 hover:opacity-100"
+                  }`}
               >
                 <span>{t.icon}</span>
                 <span className="hidden sm:inline">{t.label}</span>
@@ -1262,7 +1260,7 @@ function AdminPanel({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="text-sm font-semibold">@{m.username}</p>
                         <span className={`badge badge-xs ${roleColor(m.role)}`}>{m.role}</span>
-                        {m.isMuted  && <span className="badge badge-xs badge-warning flex items-center gap-1"><VolumeX size={10} /> Muted</span>}
+                        {m.isMuted && <span className="badge badge-xs badge-warning flex items-center gap-1"><VolumeX size={10} /> Muted</span>}
                         {m.isBanned && <span className="badge badge-xs badge-error flex items-center gap-1"><Ban size={10} /> Banned</span>}
                       </div>
                       <p className="text-xs opacity-40">
@@ -1274,9 +1272,9 @@ function AdminPanel({
                         {actingMem === m.userId ? <Spin xs /> : "⋯"}
                       </button>
                       <ul tabIndex={0} className="dropdown-content menu menu-sm bg-base-100 rounded-xl border border-base-300 shadow-lg z-50 w-44 p-1">
-                        {m.role !== "ADMIN"     && <li><button onClick={() => memberAction(m.userId, "makeAdmin")}><Crown size={14} /> Make Admin</button></li>}
+                        {m.role !== "ADMIN" && <li><button onClick={() => memberAction(m.userId, "makeAdmin")}><Crown size={14} /> Make Admin</button></li>}
                         {m.role !== "MODERATOR" && <li><button onClick={() => memberAction(m.userId, "makeMod")}><Shield size={14} /> Make Moderator</button></li>}
-                        {m.role !== "MEMBER"    && <li><button onClick={() => memberAction(m.userId, "makeMember")}><User size={14} /> Make Member</button></li>}
+                        {m.role !== "MEMBER" && <li><button onClick={() => memberAction(m.userId, "makeMember")}><User size={14} /> Make Member</button></li>}
                         <li className="menu-title"><span className="text-xs opacity-40">Actions</span></li>
                         {!m.isMuted
                           ? <li><button onClick={() => memberAction(m.userId, "mute")}><VolumeX size={14} /> Mute</button></li>
@@ -1337,14 +1335,14 @@ function AdminPanel({
               <div>
                 <label className="block text-sm font-semibold mb-2">Privacy</label>
                 <div className="space-y-2">
-                  {(["PUBLIC","PRIVATE","SECRET"] as const).map(p => (
+                  {(["PUBLIC", "PRIVATE", "SECRET"] as const).map(p => (
                     <button key={p} type="button"
                       onClick={() => setSettingsForm(f => ({ ...f, privacy: p }))}
                       className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${settingsForm.privacy === p ? "border-blue-700 bg-blue-700/10" : "border-base-300 hover:border-base-400"}`}>
                       <span className="text-xl">{PRIV_ICON[p]}</span>
                       <div className="flex-1">
                         <p className={`text-sm font-semibold ${settingsForm.privacy === p ? "text-blue-700" : ""}`}>
-                          {p.charAt(0)+p.slice(1).toLowerCase()}
+                          {p.charAt(0) + p.slice(1).toLowerCase()}
                         </p>
                         <p className="text-xs opacity-50">{PRIV_DESC[p]}</p>
                       </div>
@@ -1356,16 +1354,16 @@ function AdminPanel({
               <div className="space-y-2">
                 <label className="block text-sm font-semibold">Permissions</label>
                 {[
-                  { key: "allowMemberPosts",    label: "Members can post",        desc: "Any member can create posts" },
-                  { key: "requirePostApproval", label: "Require post approval",   desc: "Posts need moderator approval" },
-                  { key: "feedEligible",        label: "Show posts in main feed", desc: "High-engagement posts surface in the main feed" },
+                  { key: "allowMemberPosts", label: "Members can post", desc: "Any member can create posts" },
+                  { key: "requirePostApproval", label: "Require post approval", desc: "Posts need moderator approval" },
+                  { key: "feedEligible", label: "Show posts in main feed", desc: "High-engagement posts surface in the main feed" },
                 ].map(({ key, label, desc }) => (
                   <label key={key} className="flex items-center justify-between gap-3 rounded-xl border border-base-300 p-3 cursor-pointer hover:border-base-400">
                     <div>
                       <p className="text-sm font-medium">{label}</p>
                       <p className="text-xs opacity-50">{desc}</p>
                     </div>
-                    <input type="checkbox" className="toggle toggle-primary toggle-sm"
+                    <input type="checkbox" className="toggle border-[#1D4ED8] bg-[#1D4ED8] checked:bg-[#1D4ED8] toggle-sm"
                       checked={settingsForm[key as keyof typeof settingsForm] as boolean}
                       onChange={e => setSettingsForm(f => ({ ...f, [key]: e.target.checked }))} />
                   </label>
@@ -1390,14 +1388,16 @@ function AdminPanel({
               {insightsLoading && <div className="flex justify-center py-10"><Spin /></div>}
               {!insightsLoading && !insights && (
                 <div className="text-center py-10 opacity-50 space-y-2">
-                  <div className="text-4xl">📊</div>
+                  <div className="flex justify-center text-base-content/20 mb-2">
+                    <BarChart3 size={48} strokeWidth={1.5} />
+                  </div>
                   <p className="text-sm">Could not load insights.</p>
                   <button className="btn btn-sm btn-outline !opacity-100" onClick={loadInsights}>Retry</button>
                 </div>
               )}
               {!insightsLoading && insights && (
                 <>
-                  <div className="rounded-2xl border border-base-300 bg-gradient-to-br from-primary/10 to-base-200 p-5 text-center">
+                  <div className="rounded-2xl border border-base-300 bg-gradient-to-br from-[#1D4ED8]/10 to-base-200 p-5 text-center">
                     <p className="text-xs opacity-50 uppercase tracking-widest mb-1">Health Score</p>
                     <p className="text-5xl font-black text-blue-700">
                       {insights.healthScore != null ? Math.round(insights.healthScore) : "—"}
@@ -1406,15 +1406,18 @@ function AdminPanel({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      ["👥 Members", insights.memberCount],
-                      ["📝 Posts",   insights.postCount],
-                      ["💬 Comments", insights.totalCommentCount],
-                      ["🔥 Active",  insights.activeMembers],
-                      ["📡 Feed Reach", insights.feedReach],
-                    ].filter(([, v]) => v != null).map(([label, value]) => (
-                      <div key={String(label)} className="rounded-xl border border-base-300 bg-base-200 p-3 text-center">
-                        <p className="text-xs opacity-50 mb-0.5">{label}</p>
-                        <p className="text-lg font-bold">{Number(value).toLocaleString()}</p>
+                      { icon: <Users size={14} className="text-blue-600" />, label: "Members", value: insights.memberCount },
+                      { icon: <FileText size={14} className="text-emerald-600" />, label: "Posts", value: insights.postCount },
+                      { icon: <MessageSquare size={14} className="text-purple-600" />, label: "Comments", value: insights.totalCommentCount },
+                      { icon: <Activity size={14} className="text-orange-600" />, label: "Active", value: insights.activeMembers },
+                      { icon: <Radio size={14} className="text-rose-600" />, label: "Feed Reach", value: insights.feedReach },
+                    ].filter((item) => item.value != null).map((item) => (
+                      <div key={item.label} className="rounded-xl border border-base-300 bg-base-200 p-3 text-center flex flex-col items-center justify-center">
+                        <div className="flex items-center gap-1.5 opacity-60 mb-1">
+                          {item.icon}
+                          <span className="text-[10px] font-bold uppercase tracking-wider">{item.label}</span>
+                        </div>
+                        <p className="text-lg font-bold">{Number(item.value).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
@@ -1458,7 +1461,7 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
     allowMemberPosts: true, requirePostApproval: false,
   });
   const [busy, setBusy] = useState(false);
-  const [err, setErr]   = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const canNext = form.name.trim().length >= 3 && form.description.trim().length >= 10;
 
   async function submit() {
@@ -1494,7 +1497,7 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
               <Plus size={18} className="text-blue-700" /> Create Community
             </h2>
             <div className="flex gap-1 mt-1.5">
-              {[1,2].map(s => <div key={s} className={`h-1 w-8 rounded-full transition-all ${step >= s ? "bg-blue-700" : "bg-base-300"}`} />)}
+              {[1, 2].map(s => <div key={s} className={`h-1 w-8 rounded-full transition-all ${step >= s ? "bg-blue-700" : "bg-base-300"}`} />)}
             </div>
           </div>
           <button onClick={onClose} className="btn btn-ghost btn-circle btn-sm"><X size={18} /></button>
@@ -1529,7 +1532,7 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
                     <button key={cat} type="button" onClick={() => setForm(f => ({ ...f, category: cat }))}
                       className={`rounded-xl border py-2 px-1 text-center text-xs transition-all ${form.category === cat ? "border-blue-700 bg-blue-700/15 text-blue-700 font-semibold" : "border-base-300 hover:border-base-400 opacity-70"}`}>
                       <div className="text-lg mb-0.5">{CAT_ICON[cat]}</div>
-                      <div className="leading-tight">{cat.replace(/_/g," ")}</div>
+                      <div className="leading-tight">{cat.replace(/_/g, " ")}</div>
                     </button>
                   ))}
                 </div>
@@ -1541,12 +1544,12 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
               <div>
                 <label className="block text-sm font-semibold mb-2">Privacy</label>
                 <div className="space-y-2">
-                  {(["PUBLIC","PRIVATE","SECRET"] as const).map(p => (
+                  {(["PUBLIC", "PRIVATE", "SECRET"] as const).map(p => (
                     <button key={p} type="button" onClick={() => setForm(f => ({ ...f, privacy: p }))}
                       className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${form.privacy === p ? "border-blue-700 bg-blue-700/10" : "border-base-300 hover:border-base-400"}`}>
                       <span className="text-2xl">{PRIV_ICON[p]}</span>
                       <div className="flex-1">
-                        <p className={`text-sm font-semibold ${form.privacy === p ? "text-blue-700" : ""}`}>{p.charAt(0)+p.slice(1).toLowerCase()}</p>
+                        <p className={`text-sm font-semibold ${form.privacy === p ? "text-blue-700" : ""}`}>{p.charAt(0) + p.slice(1).toLowerCase()}</p>
                         <p className="text-xs opacity-50">{PRIV_DESC[p]}</p>
                       </div>
                       {form.privacy === p && <span className="text-blue-700 font-bold">✓</span>}
@@ -1562,13 +1565,13 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
               <div className="space-y-2">
                 <label className="block text-sm font-semibold">Settings</label>
                 {[
-                  { key:"allowMemberPosts",    label:"Members can post",      desc:"Anyone in community can create posts" },
-                  { key:"requirePostApproval", label:"Require post approval", desc:"Moderator reviews before publishing" },
-                  { key:"locationRestricted",  label:"Location restricted",   desc:"Limit to your pincode area" },
+                  { key: "allowMemberPosts", label: "Members can post", desc: "Anyone in community can create posts" },
+                  { key: "requirePostApproval", label: "Require post approval", desc: "Moderator reviews before publishing" },
+                  { key: "locationRestricted", label: "Location restricted", desc: "Limit to your pincode area" },
                 ].map(({ key, label, desc }) => (
                   <label key={key} className="flex items-center justify-between gap-3 rounded-xl border border-base-300 p-3 cursor-pointer hover:border-base-400">
                     <div><p className="text-sm font-medium">{label}</p><p className="text-xs opacity-50">{desc}</p></div>
-                    <input type="checkbox" className="toggle toggle-primary toggle-sm"
+                    <input type="checkbox" className="toggle border-[#1D4ED8] bg-[#1D4ED8] checked:bg-[#1D4ED8] toggle-sm"
                       checked={form[key as keyof CreateForm] as boolean}
                       onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))} />
                   </label>
@@ -1578,10 +1581,33 @@ function CreateModal({ onClose, onDone }: { onClose: () => void; onDone: (c: Com
           )}
         </div>
         <div className="shrink-0 px-5 py-4 border-t border-base-300 flex gap-3">
-          {step === 2 && <button className="btn btn-ghost btn-outline flex-1 gap-1" onClick={() => setStep(1)} disabled={busy}><HiOutlineArrowLeft size={14} /> Back</button>}
+          {step === 2 && (
+            <button
+              className="btn btn-ghost border border-base-300 flex-1 items-center justify-center gap-1.5"
+              onClick={() => setStep(1)}
+              disabled={busy}
+            >
+              <ChevronLeft size={16} /> Back
+            </button>
+          )}
           {step === 1
-            ? <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 flex-1 gap-1" disabled={!canNext} onClick={() => setStep(2)}>Next <HiOutlineArrowRight size={14} /></button>
-            : <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 flex-1" disabled={busy} onClick={submit}>{busy ? <><Spin xs /> Creating…</> : "🚀 Create Community"}</button>
+            ? (
+              <button
+                className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 flex-1 flex items-center justify-center gap-2"
+                disabled={!canNext}
+                onClick={() => setStep(2)}
+              >
+                Next <HiOutlineArrowRight size={14} />
+              </button>
+            ) : (
+              <button
+                className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 flex-1 flex items-center justify-center gap-2"
+                disabled={busy}
+                onClick={submit}
+              >
+                {busy ? <><Spin xs /> Creating…</> : <><Rocket size={18} /> Create Community</>}
+              </button>
+            )
           }
         </div>
       </div>
@@ -1604,15 +1630,15 @@ function DetailPanel({
   const normalise = (raw: CommunityData): CommunityData =>
     raw.isOwner ? { ...raw, isMember: true } : raw;
 
-  const [c, setC]                     = useState(() => normalise(community));
-  const [tab, setTab]                 = useState<"posts" | "about">("posts");
-  const [posts, setPosts]             = useState<Post[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [hasMore, setHasMore]         = useState(false);
-  const [cursor, setCursor]           = useState<number | null>(null);
-  const [acting, setActing]           = useState(false);
-  const [postText, setPostText]       = useState("");
-  const [posting, setPosting]         = useState(false);
+  const [c, setC] = useState(() => normalise(community));
+  const [tab, setTab] = useState<"posts" | "about">("posts");
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [acting, setActing] = useState(false);
+  const [postText, setPostText] = useState("");
+  const [posting, setPosting] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
 
   useEffect(() => { setC(normalise(community)); }, [community]);
@@ -1672,7 +1698,7 @@ function DetailPanel({
     finally { setPosting(false); }
   }
 
-  const canPost  = c.isOwner || (c.isMember && c.allowMemberPosts !== false);
+  const canPost = c.isOwner || (c.isMember && c.allowMemberPosts !== false);
   const isSecret = c.privacy === "SECRET" && !c.isMember;
 
   return (
@@ -1685,10 +1711,10 @@ function DetailPanel({
           <button className="btn btn-ghost btn-sm gap-1" onClick={onClose}>← Back</button>
           {!c.isOwner
             ? <button
-                className={`btn btn-sm ${c.isMember ? "btn-ghost btn-outline" : c.hasPendingRequest ? "btn-warning btn-outline" : isSecret ? "btn-disabled" : "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800"}`}
-                onClick={toggleMembership} disabled={acting || isSecret}>
-                {acting ? <Spin xs /> : c.isMember ? "✓ Joined · Leave" : c.hasPendingRequest ? "⏳ Pending · Cancel" : isSecret ? "Invite Only" : c.privacy === "PRIVATE" ? "Request to Join" : "Join Community"}
-              </button>
+              className={`btn btn-sm ${c.isMember ? "btn-ghost btn-outline" : c.hasPendingRequest ? "btn-warning btn-outline" : isSecret ? "btn-disabled" : "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800"}`}
+              onClick={toggleMembership} disabled={acting || isSecret}>
+              {acting ? <Spin xs /> : c.isMember ? "✓ Joined · Leave" : c.hasPendingRequest ? "⏳ Pending · Cancel" : isSecret ? "Invite Only" : c.privacy === "PRIVATE" ? "Request to Join" : "Join Community"}
+            </button>
             : <span className="badge badge-outline badge-sm flex items-center gap-1"><Settings size={12} /> Owner</span>
           }
         </div>
@@ -1704,17 +1730,17 @@ function DetailPanel({
                   !showCompose
                     ? <button className="w-full rounded-xl border border-dashed border-base-300 px-4 py-3 text-left text-sm opacity-60 hover:opacity-100 transition-opacity flex items-center gap-2" onClick={() => setShowCompose(true)}><Pencil size={16} /> Write something in {c.name}…</button>
                     : <div className="rounded-xl border border-base-300 bg-base-200 p-3 space-y-2">
-                        <textarea autoFocus className="textarea textarea-bordered w-full resize-none text-sm bg-base-100" rows={3}
-                          placeholder={`Share something with ${c.name}…`} maxLength={2000}
-                          value={postText} onChange={e => setPostText(e.target.value)} />
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs opacity-40">{postText.length}/2000</span>
-                          <div className="flex gap-2">
-                            <button className="btn btn-ghost btn-sm" onClick={() => { setShowCompose(false); setPostText(""); }}>Cancel</button>
-                            <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm" disabled={!postText.trim() || posting} onClick={submitPost}>{posting ? <Spin xs /> : "Post"}</button>
-                          </div>
+                      <textarea autoFocus className="textarea textarea-bordered w-full resize-none text-sm bg-base-100" rows={3}
+                        placeholder={`Share something with ${c.name}…`} maxLength={2000}
+                        value={postText} onChange={e => setPostText(e.target.value)} />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs opacity-40">{postText.length}/2000</span>
+                        <div className="flex gap-2">
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setShowCompose(false); setPostText(""); }}>Cancel</button>
+                          <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm" disabled={!postText.trim() || posting} onClick={submitPost}>{posting ? <Spin xs /> : "Post"}</button>
                         </div>
                       </div>
+                    </div>
                 )}
                 {loading && posts.length === 0 && <div className="flex justify-center py-10"><Spin /></div>}
                 {!loading && posts.length === 0 && (
@@ -1760,12 +1786,11 @@ function DetailPanel({
                 <div className="grid grid-cols-2 gap-3">
                   {([
                     ["Members", c.memberCount.toLocaleString(), <Users size={14} />],
-                    ["Posts",   c.postCount.toLocaleString(), <MessageSquare size={14} />],
+                    ["Posts", c.postCount.toLocaleString(), <MessageSquare size={14} />],
                     ["Privacy", c.privacy, <Lock size={14} />],
-                    ["Since",   new Date(c.createdAt).toLocaleDateString("en-IN",{month:"short",year:"numeric"}), <Calendar size={14} />],
-                    c.category     ? ["Category", c.category.replace(/_/g," "), <Tag size={14} />] : null,
-                    c.locationName ? ["Location",  c.locationName, <MapPin size={14} />]              : null,
-                  ] as Array<[string, string, React.ReactNode] | null>).filter(Boolean).map(([l, v, ico]) => (
+                    ["Since", new Date(c.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" }), <Calendar size={14} />],
+                    c.category ? ["Category", c.category.replace(/_/g, " "), <Tag size={14} />] : null,
+                  ] as Array<[string, string, React.ReactNode] | null>).filter((item): item is [string, string, React.ReactNode] => !!item).map(([l, v, ico]) => (
                     <div key={l} className="rounded-xl border border-base-300 bg-base-200 p-3">
                       <p className="text-xs opacity-50 mb-1 flex items-center gap-1">{ico} {l}</p>
                       <p className="text-sm font-semibold">{v}</p>
@@ -1800,23 +1825,23 @@ function DetailPanel({
    MAIN PAGE
 ════════════════════════════════════════════════════════════════════════════ */
 const Community = () => {
-  const [query, setQuery]                                 = useState("");
-  const [committed, setCommitted]                         = useState("");
-  const [searchResults, setSearchResults]                 = useState<CommunityData[]>([]);
-  const [searchLoading, setSearchLoading]                 = useState(false);
-  const [searchHasMore, setSearchHasMore]                 = useState(false);
-  const [searchCursor, setSearchCursor]                   = useState<number | null>(null);
-  const [searchLoadingMore, setSearchLoadingMore]         = useState(false);
-  const [suggestions, setSuggestions]                     = useState<CommunityData[]>([]);
-  const [showSuggestions, setShowSuggestions]             = useState(false);
-  const [myCommunities, setMyCommunities]                 = useState<CommunityData[]>([]);
-  const [myCommunitiesLoading, setMyCommunitiesLoading]   = useState(true);
-  const [selected, setSelected]                           = useState<CommunityData | null>(null);
-  const [adminTarget, setAdminTarget]                     = useState<CommunityData | null>(null);
-  const [showCreate, setShowCreate]                       = useState(false);
-  const [view, setView]                                   = useState<"default" | "joined" | "owned">("default");
+  const [query, setQuery] = useState("");
+  const [committed, setCommitted] = useState("");
+  const [searchResults, setSearchResults] = useState<CommunityData[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchCursor, setSearchCursor] = useState<number | null>(null);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
+  const [suggestions, setSuggestions] = useState<CommunityData[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [myCommunities, setMyCommunities] = useState<CommunityData[]>([]);
+  const [myCommunitiesLoading, setMyCommunitiesLoading] = useState(true);
+  const [selected, setSelected] = useState<CommunityData | null>(null);
+  const [adminTarget, setAdminTarget] = useState<CommunityData | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [view, setView] = useState<"default" | "joined" | "owned">("default");
 
-  const inputRef         = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const quickDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchMyCommunities = useCallback(async () => {
@@ -1824,17 +1849,17 @@ const Community = () => {
     try {
       const [joinedRes, ownedRes] = await Promise.allSettled([
         fetch("/api/communities/me?limit=100", { headers: hdrs() }),
-        fetch("/api/communities/owned",         { headers: hdrs() }),
+        fetch("/api/communities/owned", { headers: hdrs() }),
       ]);
       let joined: CommunityData[] = [];
       if (joinedRes.status === "fulfilled" && joinedRes.value.ok) {
         const j = await joinedRes.value.json().catch(() => ({}));
-        joined  = (j?.data?.content ?? j?.content ?? []).map((c: CommunityData) => ({ ...c, isMember: c.isMember || c.isOwner }));
+        joined = (j?.data?.content ?? j?.content ?? []).map((c: CommunityData) => ({ ...c, isMember: c.isMember || c.isOwner }));
       }
       let owned: CommunityData[] = [];
       if (ownedRes.status === "fulfilled" && ownedRes.value.ok) {
         const o = await ownedRes.value.json().catch(() => ({}));
-        owned   = (o?.data ?? o?.content ?? []).map((c: CommunityData) => ({ ...c, isMember: true, isOwner: true }));
+        owned = (o?.data ?? o?.content ?? []).map((c: CommunityData) => ({ ...c, isMember: true, isOwner: true }));
       }
       const seen = new Set<number>(); const merged: CommunityData[] = [];
       for (const c of [...owned, ...joined]) { if (!seen.has(c.id)) { seen.add(c.id); merged.push(c); } }
@@ -1932,11 +1957,11 @@ const Community = () => {
   }
 
   const isSearching = committed.length > 0;
-  const ownedList   = myCommunities.filter(c => c.isOwner);
-  const joinedOnly  = myCommunities.filter(c => !c.isOwner);
+  const ownedList = myCommunities.filter(c => c.isOwner);
+  const joinedOnly = myCommunities.filter(c => !c.isOwner);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -1944,7 +1969,7 @@ const Community = () => {
           <h1 className="text-xl font-semibold">Communities</h1>
           <p className="text-sm opacity-70">Discover and join communities based on your interests.</p>
         </div>
-        <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm gap-2 shrink-0" onClick={() => setShowCreate(true)}>
+        <button className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 btn-sm gap-2 shrink-0" onClick={() => setShowCreate(true)}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
@@ -1962,7 +1987,7 @@ const Community = () => {
               onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-              onKeyDown={e => { if (e.key==="Enter") { e.preventDefault(); commitSearch(query); } if (e.key==="Escape") setShowSuggestions(false); }} />
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commitSearch(query); } if (e.key === "Escape") setShowSuggestions(false); }} />
             {query && (
               <button className="absolute right-3 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-80"
                 onClick={() => { setQuery(""); setCommitted(""); setSearchResults([]); setSuggestions([]); inputRef.current?.focus(); }}><X size={16} /></button>
@@ -1972,7 +1997,7 @@ const Community = () => {
                 {suggestions.map(c => (
                   <button key={c.id} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-base-200 text-left transition-colors"
                     onMouseDown={e => { e.preventDefault(); commitSearch(c.name); }}>
-                    <span className="text-blue-700 shrink-0"><Home size={18} /></span>
+                    <span className="text-[#1D4ED8] shrink-0"><Home size={18} /></span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{highlight(c.name, query)}</p>
                       {c.description && <p className="text-xs opacity-50 truncate">{c.description}</p>}
@@ -1983,7 +2008,7 @@ const Community = () => {
               </div>
             )}
           </div>
-          <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 px-4" disabled={!query.trim()} onClick={() => commitSearch(query)}>Search</button>
+          <button className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 px-4" disabled={!query.trim()} onClick={() => commitSearch(query)}>Search</button>
         </div>
       </div>
 
@@ -1992,14 +2017,14 @@ const Community = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setView(v => v === "joined" ? "default" : "joined")}
-            className={`btn btn-sm rounded-full gap-1.5 transition-all ${view === "joined" ? "bg-blue-700 text-white font-semibold border-none hover:bg-blue-800" : "btn-ghost border border-base-300 hover:border-blue-700/50"}`}
+            className={`btn btn-sm rounded-full gap-1.5 transition-all ${view === "joined" ? "bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90" : "btn-ghost border border-base-300 hover:border-[#1D4ED8]/50"}`}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-5-3.87M9 20H4v-2a4 4 0 015-3.87m6-4a4 4 0 11-8 0 4 4 0 018 0zm6 0a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             My Communities
             {joinedOnly.length > 0 && (
-              <span className={`badge badge-xs ${view === "joined" ? "badge-primary-content bg-white/30" : "badge-ghost"}`}>{joinedOnly.length}</span>
+              <span className={`badge badge-xs ${view === "joined" ? "bg-white/30 text-white" : "badge-ghost"}`}>{joinedOnly.length}</span>
             )}
           </button>
           <button
@@ -2023,13 +2048,13 @@ const Community = () => {
         <>
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-widest opacity-40">
-              Results for "{committed}"{!searchLoading && searchResults.length > 0 && ` · ${searchResults.length}${searchHasMore?"+":""}`}
+              Results for "{committed}"{!searchLoading && searchResults.length > 0 && ` · ${searchResults.length}${searchHasMore ? "+" : ""}`}
             </p>
             <button className="btn btn-ghost btn-xs opacity-50" onClick={() => { setQuery(""); setCommitted(""); setSearchResults([]); }}>Clear</button>
           </div>
           {searchLoading && (
             <div className="grid gap-4 sm:grid-cols-2">
-              {Array.from({length:4}).map((_,i) => (
+              {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-base-300 bg-base-200 p-4 animate-pulse space-y-3">
                   <div className="h-4 bg-base-300 rounded w-2/3" /><div className="h-3 bg-base-300 rounded w-full" />
                   <div className="h-3 bg-base-300 rounded w-1/3" /><div className="h-9 bg-base-300 rounded-lg w-full mt-2" />
@@ -2038,14 +2063,16 @@ const Community = () => {
             </div>
           )}
           {!searchLoading && searchResults.length === 0 && committed && (
-            <div className="text-center py-12 opacity-50 space-y-3">
-              <div className="text-4xl"><SearchAlertIcon className="flex items-center justify-center" /></div>
+            <div className="flex flex-col items-center justify-center py-16 opacity-50 space-y-3">
+              <div className="flex items-center justify-center mb-2">
+                <SearchAlertIcon size={48} className="text-base-content/25" />
+              </div>
               <p className="text-sm">No communities found for "{committed}"</p>
-              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create "{committed}"</button>
+              <button className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create "{committed}"</button>
             </div>
           )}
           {!searchLoading && searchResults.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
               {searchResults.map((c: any) => (
                 <CommunityCard key={c.id} slug={c.slug} name={c.name} description={c.description}
                   members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} onClick={() => setSelected(c)} />
@@ -2053,7 +2080,7 @@ const Community = () => {
             </div>
           )}
           {searchHasMore && !searchLoading && (
-            <button className="w-full py-2 text-sm text-blue-700 hover:opacity-70 transition-opacity"
+            <button className="w-full py-2 text-sm text-[#1D4ED8] hover:opacity-70 transition-opacity"
               disabled={searchLoadingMore} onClick={() => doSearch(committed, searchCursor, false)}>
               {searchLoadingMore ? <Spin xs /> : "Load more ↓"}
             </button>
@@ -2066,7 +2093,7 @@ const Community = () => {
         <>
           {myCommunitiesLoading && (
             <div className="grid gap-4 sm:grid-cols-2">
-              {Array.from({length:4}).map((_,i) => (
+              {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-base-300 bg-base-200 p-4 animate-pulse space-y-3">
                   <div className="h-4 bg-base-300 rounded w-2/3" /><div className="h-3 bg-base-300 rounded w-full" />
                   <div className="h-3 bg-base-300 rounded w-1/3" /><div className="h-9 bg-base-300 rounded-lg w-full mt-2" />
@@ -2091,60 +2118,61 @@ const Community = () => {
                   <p className="text-xs font-semibold uppercase tracking-widest opacity-40 flex items-center gap-1.5">
                     <Settings size={14} /> Created by you · {ownedList.length}
                   </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
                     {ownedList.map(c => {
                       const ownedImgSrc = c.avatarUrl || `https://robohash.org/${encodeURIComponent(c.name)}`;
                       return (
-                      <div key={c.id} className="group relative rounded-2xl border border-base-300 bg-base-100 overflow-hidden transition-all duration-200 hover:border-blue-700/40 hover:shadow-[0_4px_24px_-4px_rgba(29,78,216,0.18)] hover:scale-[1.015] active:scale-[0.98]" style={{ transform: "translateZ(0)" }}>
+                        <div key={c.id} className="group relative rounded-2xl border border-base-300 bg-base-100 overflow-hidden transition-all duration-200 min-w-0" style={{ transform: "translateZ(0)" }}>
 
-                        <div className="p-4 cursor-pointer" onClick={() => setSelected({ ...c, isMember: true })}>
-                          <div className="flex items-center gap-3.5">
-                            {/* Circular avatar */}
-                            <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden ring-2 ring-base-300 group-hover:ring-blue-700/40 transition-all duration-200 shadow-sm group-hover:shadow-md">
-                              <img
-                                src={ownedImgSrc}
-                                alt={c.name}
-                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                onError={e => { (e.target as HTMLImageElement).src = `https://robohash.org/${encodeURIComponent(c.name)}`; }}
-                              />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                                <p className="font-bold text-sm truncate">{c.name}</p>
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
-                                  <Settings size={8} /> Owner
-                                </span>
-                                {c.privacy !== "PUBLIC" && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-base-200 text-base-content/60 border border-base-300">
-                                    {c.privacy === "SECRET" ? <><EyeOff size={9} /> Secret</> : <><Lock size={9} /> Private</>}
-                                  </span>
-                                )}
+                          <div className="p-4 cursor-pointer" onClick={() => setSelected({ ...c, isMember: true })}>
+                            <div className="flex items-center gap-3.5">
+                              {/* Circular avatar */}
+                              <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden ring-2 ring-base-300 transition-all duration-200 shadow-sm">
+                                <img
+                                  src={ownedImgSrc}
+                                  alt={c.name}
+                                  className="w-full h-full object-cover transition-transform duration-300"
+                                  onError={e => { (e.target as HTMLImageElement).src = `https://robohash.org/${encodeURIComponent(c.name)}`; }}
+                                />
                               </div>
-                              {c.description && <p className="text-xs text-base-content/60 line-clamp-1">{c.description}</p>}
-                              <p className="text-[11px] font-medium text-base-content/45 mt-1 flex items-center gap-1">
-                                <Users size={11} className="text-blue-700/60" /> {c.memberCount.toLocaleString()} members
-                              </p>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                  <p className="font-bold text-sm truncate">{c.name}</p>
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
+                                    <Settings size={8} /> Owner
+                                  </span>
+                                  {c.privacy !== "PUBLIC" && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-base-200 text-base-content/60 border border-base-300">
+                                      {c.privacy === "SECRET" ? <><EyeOff size={9} /> Secret</> : <><Lock size={9} /> Private</>}
+                                    </span>
+                                  )}
+                                </div>
+                                {c.description && <p className="text-xs text-base-content/60 line-clamp-1">{c.description}</p>}
+                                <p className="text-[11px] font-medium text-base-content/45 mt-1 flex items-center gap-1">
+                                  <Users size={11} className="text-[#1D4ED8]/60" /> {c.memberCount.toLocaleString()} members
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Action buttons */}
-                        <div className="border-t border-base-200 grid grid-cols-2 divide-x divide-base-200">
-                          <button
-                            className="py-2.5 text-xs font-semibold text-base-content/60 hover:text-base-content hover:bg-base-200 transition-all duration-200 flex items-center justify-center gap-1.5"
-                            onClick={() => setSelected({ ...c, isMember: true })}
-                          >
-                            <Eye size={13} /> View
-                          </button>
-                          <button
-                            className="py-2.5 text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 transition-all duration-200 flex items-center justify-center gap-1.5"
-                            onClick={e => { e.stopPropagation(); setAdminTarget(c); }}
-                          >
-                            <Settings size={13} /> Manage
-                          </button>
+                          {/* Action buttons */}
+                          <div className="border-t border-base-200 grid grid-cols-2 divide-x divide-base-200">
+                            <button
+                              className="py-2.5 text-xs font-semibold text-base-content/60 hover:text-base-content hover:bg-base-200 transition-all duration-200 flex items-center justify-center gap-1.5"
+                              onClick={() => setSelected({ ...c, isMember: true })}
+                            >
+                              <Eye size={13} /> View
+                            </button>
+                            <button
+                              className="py-2.5 text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 transition-all duration-200 flex items-center justify-center gap-1.5"
+                              onClick={e => { e.stopPropagation(); setAdminTarget(c); }}
+                            >
+                              <Settings size={13} /> Manage
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );})}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2153,7 +2181,7 @@ const Community = () => {
                 <div className="text-center py-14 opacity-60 space-y-3">
                   <div className="flex justify-center text-base-content/20"><Settings size={48} /></div>
                   <p className="font-semibold">You haven't created any communities yet</p>
-                  <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create your first community</button>
+                  <button className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1D4ED8]/90 btn-sm !opacity-100" onClick={() => setShowCreate(true)}>+ Create your first community</button>
                 </div>
               )}
 
@@ -2161,7 +2189,7 @@ const Community = () => {
               {(view === "default" || view === "joined") && joinedOnly.length > 0 && (
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-widest opacity-40">✓ Joined · {joinedOnly.length}</p>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                     {joinedOnly.map(c => (
                       <CommunityCard key={c.id} slug={c.slug} name={c.name} description={c.description}
                         members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} onClick={() => setSelected(c)} />

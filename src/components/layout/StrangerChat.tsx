@@ -593,7 +593,7 @@ function Bubble({
         {!isMine && (
           <div className="chat-header text-[10px] text-base-content/40 mb-0.5">Stranger</div>
         )}
-        <div className={`chat-bubble text-sm ${isMine ? "chat-bubble-primary" : "chat-bubble-neutral"} flex flex-col gap-1`}>
+        <div className={`chat-bubble text-sm ${isMine ? "bg-[#1D4ED8] text-white chat-bubble" : "chat-bubble-neutral"} flex flex-col gap-1`}>
           {repliedMsg && (
             <div className="flex gap-1.5 pb-1.5 mb-0.5 border-b border-white/10">
               <div className="w-0.5 rounded-full bg-white/50 shrink-0" />
