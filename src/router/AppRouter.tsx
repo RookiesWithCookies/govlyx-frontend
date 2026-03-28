@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect } from "react";
 import { jwtDecode } from "jwt-decode";
+import { isDepartmentUser } from "../utils/auth";
 
 import MainLayout from "../components/layout/MainLayout";
 
@@ -9,7 +10,10 @@ import MainLayout from "../components/layout/MainLayout";
 import Home from "../pages/Home";
 import Communities from "../pages/Communities";
 import DepartmentFeed from "../pages/DepartmentFeed";
+import DepartmentDashboard from "../pages/DepartmentDashboard";
+import AdminDashboard from "../pages/AdminDashboard";
 import QuickChatPage from "../pages/QuickChatPage";
+import { isSuperAdmin } from "../utils/auth";
 import Profile from "../pages/Profile";
 import Settings from "../pages/Settings";
 import Login from "../pages/Login";
@@ -129,12 +133,26 @@ const AppRouter = () => {
         <Route
           element={isLoggedIn() ? <MainLayout /> : <Navigate to="/login" replace />}
         >
-          <Route path="/"                element={<PageWrapper><Home /></PageWrapper>} />
-          <Route path="/communities"     element={<PageWrapper><Communities /></PageWrapper>} />
+          <Route path="/" element={<PageWrapper><Home /></PageWrapper>} />
+          <Route path="/communities" element={<PageWrapper><Communities /></PageWrapper>} />
           <Route path="/department-feed" element={<PageWrapper><DepartmentFeed /></PageWrapper>} />
-          <Route path="/quick-chat"      element={<PageWrapper><QuickChatPage /></PageWrapper>} />
-          <Route path="/profile"         element={<PageWrapper><Profile /></PageWrapper>} />
-          <Route path="/settings"        element={<PageWrapper><Settings /></PageWrapper>} />
+          <Route path="/department/dashboard"
+            element={
+              !isDepartmentUser()
+                ? <Navigate to="/" replace />
+                : <PageWrapper><DepartmentDashboard /></PageWrapper>
+            }
+          />
+          <Route path="/quick-chat" element={<PageWrapper><QuickChatPage /></PageWrapper>} />
+          <Route path="/profile" element={<PageWrapper><Profile /></PageWrapper>} />
+          <Route path="/settings" element={<PageWrapper><Settings /></PageWrapper>} />
+          <Route path="/admin/dashboard" 
+            element={
+              !isSuperAdmin() 
+                ? <Navigate to="/" replace /> 
+                : <PageWrapper><AdminDashboard /></PageWrapper>
+            } 
+          />
         </Route>
 
         {/* ── Fallback ── */}

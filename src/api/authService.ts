@@ -12,6 +12,17 @@ export const registerCitizen = async (
   return response.data;
 };
 
+// POST /api/auth/register/department
+export const registerDepartment = async (
+  data: RegisterRequest
+): Promise<ApiResponse<string>> => {
+  const response = await axiosInstance.post<ApiResponse<string>>(
+    "/api/auth/register/department",
+    data
+  );
+  return response.data;
+};
+
 // POST /api/auth/login
 export const loginUser = async (
   data: AuthRequest

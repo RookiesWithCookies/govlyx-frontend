@@ -1,6 +1,13 @@
 import { LogOut, Shield, Bell, Eye } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Settings = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login", { replace: true });
+  };
   return (
     <div className="space-y-6">
 
@@ -73,7 +80,11 @@ const Settings = () => {
 
       {/* LOGOUT */}
       <div className="rounded-xl border border-base-300 bg-base-200 p-4">
-        <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700">
+        <button
+          id="logout-btn"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 transition-colors"
+        >
           <LogOut size={16} />
           Logout
         </button>

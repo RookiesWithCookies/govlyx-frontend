@@ -5,16 +5,20 @@ import {
   Dices,
   User,
   Settings,
+  LayoutDashboard,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { isDepartmentUser } from "../../utils/auth";
 
-const navItems = [
+const BASE_NAV_ITEMS = [
   { label: "Home", icon: Home, to: "/" },
   { label: "Communities", icon: Users, to: "/communities" },
   { label: "Quick Chat", icon: Dices, to: "/quick-chat" },
   { label: "Profile", icon: User, to: "/profile" },
   { label: "Settings", icon: Settings, to: "/settings" },
 ];
+
+const DEPT_NAV_ITEM = { label: "Dept. Dashboard", icon: LayoutDashboard, to: "/department/dashboard" };
 
 // ---------------------------------------------------------------------------
 // Hook: fetch the currently authenticated user from GET /api/users/me
@@ -58,12 +62,17 @@ function useCurrentUser() {
 // ---------------------------------------------------------------------------
 const SidebarLeft = () => {
   const { username, loading } = useCurrentUser();
+  const isDept = isDepartmentUser();
+
+  const navItems = isDept
+    ? [...BASE_NAV_ITEMS.slice(0, 3), DEPT_NAV_ITEM, ...BASE_NAV_ITEMS.slice(3)]
+    : BASE_NAV_ITEMS;
 
   // Removing unused avatarLetter
   const displayName = loading ? "Loading..." : (username ?? "Anonymous User");
 
   return (
-    <aside className="flex h-full flex-col gap-6">
+    <aside className="flex min-h-full flex-col gap-6 pb-8">
 
       {/* Profile Card */}
       <div className="rounded-xl bg-base-200 p-4">
@@ -111,6 +120,7 @@ const SidebarLeft = () => {
           <li className="truncate">Baramati News</li>
         </ul>
       </div>
+
     </aside>
   );
 };

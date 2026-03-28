@@ -926,8 +926,8 @@ export default function PostCard({
                     key={i}
                     onClick={(e) => { e.stopPropagation(); setActiveImageIndex(i); }}
                     className={`h-2 rounded-full transition-all duration-300 ${i === activeImageIndex
-                        ? "w-5 bg-[#1D4ED8]"
-                        : "w-2 bg-base-content/30 hover:bg-base-content/50"
+                      ? "w-5 bg-[#1D4ED8]"
+                      : "w-2 bg-base-content/30 hover:bg-base-content/50"
                       }`}
                   />
                 ))}

@@ -5,10 +5,14 @@ import AuthHeader from "../components/auth/AuthHeader";
 import AuthInput from "../components/auth/AuthInput";
 import { registerCitizen } from "../api/authService";
 
+type RegisterType = "citizen" | "department";
+
 const Register = () => {
   const navigate = useNavigate();
 
+  const [type] = useState<RegisterType>("citizen");
   const [form, setForm] = useState({
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -45,21 +49,22 @@ const Register = () => {
 
     setLoading(true);
     try {
-      const response = await registerCitizen({
+      const payload = {
         email: form.email,
         password: form.password,
         pincode: form.pincode,
-      });
+      };
+
+      const response = await registerCitizen(payload);
 
       if (response.success) {
-        setSuccess(response.message || "Registered successfully!");
+        setSuccess(response.message || "Welcome to Govlyx! Your account is ready.");
         setTimeout(() => navigate("/login"), 1500);
       } else {
         setError(response.message || "Registration failed");
       }
     } catch (err: any) {
-      const msg =
-        err.response?.data?.message || "Registration failed. Please try again.";
+      const msg = err.response?.data?.message || "Registration failed. Please try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -69,20 +74,24 @@ const Register = () => {
   return (
     <AuthLayout>
       <AuthHeader
-        title="Create account"
-        subtitle="Join Govlyx anonymously"
+        title={type === "citizen" ? "Join Govlyx" : "Onboard Department"}
+        subtitle={type === "citizen" ? "Join Govlyx anonymously" : "Register a verified government body"}
       />
+
+      {/* No switcher — citizens only */}
 
       {/* Error Message */}
       {error && (
-        <div className="mb-3 rounded-md bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-400">
+        <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-2.5 text-sm text-red-400 flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <span className="h-1 w-1 rounded-full bg-red-500" />
           {error}
         </div>
       )}
 
       {/* Success Message */}
       {success && (
-        <div className="mb-3 rounded-md bg-green-500/10 border border-green-500/30 px-4 py-2 text-sm text-green-400">
+        <div className="mb-4 rounded-xl bg-green-500/10 border border-green-500/30 px-4 py-2.5 text-sm text-green-400 flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <span className="h-1 w-1 rounded-full bg-green-500" />
           {success}
         </div>
       )}
@@ -90,9 +99,9 @@ const Register = () => {
       {/* Form */}
       <div className="space-y-4">
         <AuthInput
-          label="Email"
+          label="Email Address"
           type="email"
-          placeholder="you@example.com"
+          placeholder="user@govlyx.com"
           name="email"
           value={form.email}
           onChange={handleChange}
@@ -120,27 +129,27 @@ const Register = () => {
           label="Pincode"
           type="number"
           placeholder="110001"
-          helperText="Used to personalize local feeds and updates"
+          helperText="Used to show you local civic issues"
           name="pincode"
           value={form.pincode}
           onChange={handleChange}
         />
 
         <button
-          className="btn w-full bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn w-full bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed h-12 rounded-xl mt-2 shadow-lg shadow-blue-700/20"
           onClick={handleRegister}
           disabled={loading}
         >
-          {loading ? "Registering..." : "Register"}
+          {loading ? "Registering..." : "Join Govlyx"}
         </button>
       </div>
 
       {/* Footer */}
-      <p className="mt-4 text-center text-sm opacity-70">
+      <p className="mt-6 text-center text-sm opacity-70">
         Already have an account?{" "}
         <NavLink
           to="/login"
-          className="text-lg text-red-400 font-bold hover:underline"
+          className="text-blue-500 font-bold hover:underline"
         >
           Login
         </NavLink>

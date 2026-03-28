@@ -6,8 +6,6 @@ import type { AnyPost, SocialPost, GovernmentPost } from "../components/post/Pos
 import EmptyState from "../components/ui/EmptyState";
 import Skeleton from "../components/ui/Skeleton";
 
-// Unused types removed for lint cleanup
-
 type FeedTab = "all" | "location" | "following" | "hot" | "new" | "top" | "for-you" | "official";
 
 function getAuthToken(): string | null {
@@ -36,7 +34,6 @@ function toPostCardPost(dto: any): AnyPost {
     } as AnyPost;
   }
 
-  // ── Detect polls: isPoll flag + embedded pollData from backend ──
   if (dto.isPoll && dto.pollData) {
     const pd = dto.pollData;
     const author = dto.author;
@@ -79,9 +76,9 @@ function toPostCardPost(dto: any): AnyPost {
 
 const FEED_SIZE = 20;
 
-const PostSkeleton = ({ isWide }: { isWide: boolean }) => {
+const PostSkeleton = () => {
   return (
-    <div className={`col-span-12 md:${isWide ? "col-span-8" : "col-span-4"} rounded-3xl border border-base-300 bg-base-200 p-6 space-y-4 animate-pulse shadow-sm h-full flex flex-col justify-between`}>
+    <div className="w-full rounded-3xl border border-base-300 bg-base-200 p-6 space-y-4 animate-pulse shadow-sm flex flex-col justify-between">
       <div className="space-y-3">
         <div className="flex items-center gap-3">
           <Skeleton className="h-10 w-10 rounded-full" />
@@ -116,13 +113,13 @@ function useFeed(tab: FeedTab) {
     async (cursor: number | null, replace: boolean) => {
       setLoading(true);
       setError(null);
+      if (replace) setInitialLoading(true);
       try {
         const token = getAuthToken();
         const params = new URLSearchParams({ limit: String(FEED_SIZE) });
         if (cursor !== null) params.set("beforeId", String(cursor));
         if (tab === "hot" || tab === "new" || tab === "top") params.set("sort", tab);
 
-        // Map frontend tabs to backend endpoints
         let endpoints: string[] = [];
         if (tab === "for-you") {
           endpoints = [
@@ -173,7 +170,6 @@ function useFeed(tab: FeedTab) {
           mergedData = [...mergedData, ...items];
           if (pageData.hasMore || pageData.hasNextPage) anyHasMore = true;
 
-          // Try to get the lowest ID for cursor
           const next = pageData.nextCursor ?? pageData.lastId ?? pageData.nextCursorId;
           if (next && (!newCursor || next < newCursor)) {
             newCursor = next;
@@ -188,11 +184,9 @@ function useFeed(tab: FeedTab) {
 
         const mapped = mergedData
           .map(toPostCardPost)
-          // Simple client-side descending sort by ID (newest first)
           .sort((a, b) => b.id - a.id);
 
         setPosts((prev) => {
-          // Keep unique IDs
           const combined = replace ? mapped : [...prev, ...mapped];
           const unique = Array.from(new Map(combined.map((item) => [item.id + "-" + item.variant, item])).values());
           return unique;
@@ -306,26 +300,19 @@ const Home = () => {
 
   const handleDelete = useCallback(async (postId: number) => {
     if (!window.confirm("Are you sure you want to delete this post?")) return;
-
-    // Determine post type to use correct endpoint
     const post = posts.find(p => p.id === postId);
     if (!post) return;
-
     let endpoint = `/api/social-posts/${postId}`;
     if (post.variant === "issue") endpoint = `/api/posts/${postId}`;
     else if (post.variant === "social" && post.isPoll) endpoint = `/api/polls/${post.pollId}`;
-
     try {
       const token = getAuthToken();
       const res = await fetch(endpoint, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-
-      if (res.ok) {
-        // Remove post from feed
-        setPosts(prev => prev.filter(p => p.id !== postId));
-      } else {
+      if (res.ok) setPosts(prev => prev.filter(p => p.id !== postId));
+      else {
         const errorData = await res.json().catch(() => ({}));
         alert(errorData.message || "Failed to delete post.");
       }
@@ -335,7 +322,7 @@ const Home = () => {
     }
   }, [posts, setPosts]);
 
-  const handleAddUser = useCallback((postId: number) => {
+  const handleAddUser = useCallback((_postId: number) => {
     alert("This feature (Add/Follow User) is coming soon!");
   }, []);
 
@@ -343,13 +330,8 @@ const Home = () => {
     const onPostCreated = (e: Event) => {
       const customEvent = e as CustomEvent;
       const newPostData = customEvent.detail?.post;
-      if (newPostData) {
-        // Immediately prepend the new post to the feed without a full refetch
-        prependPost(newPostData);
-      } else {
-        // No post data in event, fall back to full refetch
-        retry();
-      }
+      if (newPostData) prependPost(newPostData);
+      else retry();
     };
     window.addEventListener("postCreated", onPostCreated);
     return () => window.removeEventListener("postCreated", onPostCreated);
@@ -359,20 +341,16 @@ const Home = () => {
     <div className="space-y-4">
       <div className="sticky top-2 z-30">
         <div className="flex flex-col gap-2 rounded-2xl border border-base-300 bg-base-100/90 p-2 backdrop-blur-md shadow-sm lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-
-          {/* Mobile Top Header (Toggle) */}
           <div className="flex lg:hidden items-center justify-between px-2 py-1">
             <span className="text-sm font-bold opacity-60">Feed Filters</span>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-sm font-bold ${showFilters ? "bg-[#1D4ED8] text-white border-[#1D4ED8] shadow-md" : "bg-base-200 border-base-300 text-base-content/70"
-                }`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all text-sm font-bold ${showFilters ? "bg-[#1D4ED8] text-white border-[#1D4ED8] shadow-md" : "bg-base-200 border-base-300 text-base-content/70"}`}
             >
               <SlidersHorizontal size={16} />
               {showFilters ? "Hide" : "Explore"}
             </button>
           </div>
-
           <AnimatePresence>
             {(showFilters || window.innerWidth >= 1024) && (
               <motion.div
@@ -382,36 +360,25 @@ const Home = () => {
                 className="overflow-hidden flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:w-full lg:gap-4"
               >
                 <div className="flex items-center justify-between gap-2">
-                  {/* Left: Source Tabs */}
                   <div className="flex gap-1 bg-base-200/50 p-1 rounded-xl w-full lg:w-auto">
                     {SOURCE_TABS.map((t) => (
                       <button
                         key={t.key}
                         onClick={() => setSourceTab(t.key)}
-                        className={`flex-1 lg:flex-none rounded-lg px-4 py-1.5 text-sm font-bold transition-all whitespace-nowrap ${sourceTab === t.key
-                          ? "bg-[#1D4ED8] text-white shadow-md"
-                          : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
-                          }`}
+                        className={`flex-1 lg:flex-none rounded-lg px-4 py-1.5 text-sm font-bold transition-all whitespace-nowrap ${sourceTab === t.key ? "bg-[#1D4ED8] text-white shadow-md" : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"}`}
                       >
                         {t.label}
                       </button>
                     ))}
                   </div>
-
-                  {/* Sort Toggle (Mobile only, visible when filters are expanded) */}
                   <button
                     onClick={() => setShowSort(!showSort)}
-                    className={`lg:hidden flex items-center justify-center p-2 h-[38px] w-[38px] rounded-xl border transition-all ${showSort ? "bg-[#1D4ED8]/10 border-[#1D4ED8]/30 text-[#1D4ED8]" : "bg-base-200 border-base-300 text-base-content/60"
-                      }`}
+                    className={`lg:hidden flex items-center justify-center p-2 h-[38px] w-[38px] rounded-xl border transition-all ${showSort ? "bg-[#1D4ED8]/10 border-[#1D4ED8]/30 text-[#1D4ED8]" : "bg-base-200 border-base-300 text-base-content/60"}`}
                   >
                     <Clock size={18} />
                   </button>
                 </div>
-
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4 lg:flex-1 lg:justify-end">
-
-
-                  {/* Right: Sort Tabs (Desktop always, Mobile toggled) */}
                   <AnimatePresence>
                     {(showSort || window.innerWidth >= 1024) && (
                       <motion.div
@@ -425,10 +392,7 @@ const Home = () => {
                             <button
                               key={t.key}
                               onClick={() => { setSortTab(t.key); if (window.innerWidth < 1024) setShowSort(false); }}
-                              className={`flex flex-1 lg:flex-none items-center justify-center gap-2 rounded-lg px-4 py-1.5 text-sm font-bold transition-all ${sortTab === t.key
-                                ? "bg-[#1D4ED8] text-white shadow-md"
-                                : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"
-                                }`}
+                              className={`flex flex-1 lg:flex-none items-center justify-center gap-2 rounded-lg px-4 py-1.5 text-sm font-bold transition-all ${sortTab === t.key ? "bg-[#1D4ED8] text-white shadow-md" : "text-base-content/70 hover:text-base-content hover:bg-base-300/50"}`}
                             >
                               <t.icon size={16} />
                               {t.label}
@@ -442,7 +406,6 @@ const Home = () => {
               </motion.div>
             )}
           </AnimatePresence>
-
         </div>
       </div>
 
@@ -457,52 +420,46 @@ const Home = () => {
         </div>
       )}
 
-      {/* Asymmetric Grid Layout (12-col based) */}
-      <div className="grid grid-cols-12 gap-4 w-full">
+      {/* Single Column Feed Layout */}
+      <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto">
         {initialLoading ? (
-          Array.from({ length: 8 }).map((_, i) => (
-            <PostSkeleton key={`sk-${i}`} isWide={i % 4 === 0 || i % 4 === 3} />
+          Array.from({ length: 6 }).map((_, i) => (
+            <PostSkeleton key={`sk-${i}`} />
           ))
         ) : posts.length === 0 && !loading && !error ? (
-          <div className="col-span-12">
+          <div className="w-full">
             <EmptyState title="Nothing here yet" description="Be the first to post, or try a different tab." />
           </div>
         ) : (
-          posts.map((post, i) => {
-            const isWide = i % 4 === 0 || i % 4 === 3;
-            return (
-              <div
-                key={`${post.id}-${post.variant}`}
-                className={`col-span-12 md:${isWide ? "col-span-8" : "col-span-4"} h-full`}
-              >
-                <PostCard
-                  post={post}
-                  onLike={handleLike}
-                  onSave={handleSave}
-                  onShare={handleShare}
-                  onComment={handleComment}
-                  onDelete={handleDelete}
-                  onAddUser={handleAddUser}
-                />
-              </div>
-            );
-          })
+          posts.map((post) => (
+            <div key={`${post.id}-${post.variant}`} className="w-full">
+              <PostCard
+                post={post}
+                onLike={handleLike}
+                onSave={handleSave}
+                onShare={handleShare}
+                onComment={handleComment}
+                onDelete={handleDelete}
+                onAddUser={handleAddUser}
+              />
+            </div>
+          ))
         )}
 
         {!initialLoading && loading && (
           Array.from({ length: 2 }).map((_, i) => (
-            <PostSkeleton key={`more-sk-${i}`} isWide={(posts.length + i) % 4 === 0 || (posts.length + i) % 4 === 3} />
+            <PostSkeleton key={`more-sk-${i}`} />
           ))
         )}
 
         {!initialLoading && hasMore && !loading && !error && (
-          <div className="col-span-12 pt-8">
+          <div className="w-full pt-8">
             <InfiniteScrollTrigger onIntersect={loadMore} />
           </div>
         )}
 
         {!hasMore && posts.length > 0 && !error && (
-          <div className="col-span-12">
+          <div className="w-full">
             <p className="py-12 text-center text-xs opacity-40 font-bold tracking-widest uppercase flex items-center justify-center gap-2">
               <Sparkles size={16} className="text-amber-400" />
               You've reached the end of the feed

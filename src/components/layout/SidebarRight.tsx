@@ -1,56 +1,60 @@
-import { Flame, MapPin } from "lucide-react";
+import { Flame, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import govlyxLogo from "../../assets/govlyx.svg";
 
 const SidebarRight = () => {
   return (
     <>
-      <aside className="flex h-full flex-col gap-6">
+      <aside className="flex min-h-full flex-col gap-4 pb-12">
 
         {/* Trending Topics — unchanged */}
-        <div className="rounded-xl bg-base-200 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Flame size={18} className="text-blue-700" />
-            <h3 className="font-semibold">Trending</h3>
+        <div className="rounded-xl bg-base-200 p-3">
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <Flame size={16} className="text-blue-700" />
+            <h3 className="text-xs font-black uppercase tracking-wider opacity-60">Trending</h3>
           </div>
-          <ul className="space-y-2 text-sm">
-            <li className="flex justify-between">
+          <ul className="space-y-1 text-sm font-bold">
+            <li className="flex justify-between hover:bg-base-300 p-1.5 rounded-lg transition-colors cursor-pointer">
               <span>#DelhiRains</span>
-              <span className="opacity-60">1.2k</span>
+              <span className="opacity-40 text-xs">1.2k</span>
             </li>
-            <li className="flex justify-between">
+            <li className="flex justify-between hover:bg-base-300 p-1.5 rounded-lg transition-colors cursor-pointer">
               <span>#TechHelp</span>
-              <span className="opacity-60">856</span>
+              <span className="opacity-40 text-xs">856</span>
             </li>
-            <li className="flex justify-between">
+            <li className="flex justify-between hover:bg-base-300 p-1.5 rounded-lg transition-colors cursor-pointer">
               <span>#LocalIssues</span>
-              <span className="opacity-60">634</span>
+              <span className="opacity-40 text-xs">634</span>
             </li>
           </ul>
         </div>
 
-        {/* Local Updates — unchanged */}
-        <div className="rounded-xl bg-base-200 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <MapPin size={18} className="text-secondary" />
-            <h3 className="font-semibold">Local Updates</h3>
+        {/* Govlyx for Bodies (Department Request) */}
+        <div className="rounded-2xl bg-blue-600/10 border border-blue-600/20 p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2 text-blue-600">
+            <ShieldCheck size={18} />
+            <span className="text-sm font-bold">Govlyx for Bodies</span>
           </div>
-          <ul className="space-y-2 text-sm opacity-80">
-            <li>Road repair ongoing</li>
-            <li>Water supply scheduled</li>
-            <li>Community meet tomorrow</li>
-          </ul>
+          <p className="text-[11px] opacity-70 tracking-tight leading-relaxed font-medium">
+            Are you a government official? Apply for a verified department account to resolve citizen issues and communicate with your community.
+          </p>
+          <button
+            onClick={() => (window as any).openDeptRequestModal?.()}
+            className="btn btn-sm w-full bg-blue-600 hover:bg-blue-700 text-white border-none rounded-xl text-xs font-bold shadow-lg shadow-blue-600/20 h-10"
+          >
+            Request Access
+          </button>
         </div>
 
         {/* 3D App Logo Section */}
-        <div className="flex flex-1 flex-col items-center justify-center p-4">
+        <div className="mt-4 flex flex-col items-center p-2">
           <motion.div
-            className="relative flex h-48 w-48 items-center justify-center"
+            className="relative flex h-32 w-32 items-center justify-center"
             initial={{ rotateY: 0, rotateX: 0 }}
             animate={{
               rotateY: [0, 15, 0, -15, 0],
               rotateX: [0, 5, 0, -5, 0],
-              y: [0, -10, 0]
+              y: [0, -4, 0]
             }}
             transition={{
               duration: 6,
@@ -60,17 +64,17 @@ const SidebarRight = () => {
             style={{ perspective: 1000, transformStyle: "preserve-3d" }}
           >
             {/* Glow effect */}
-            <div className="absolute inset-0 scale-110 rounded-full bg-[#1D4ED8]/20 blur-2xl filter" />
-
+            <div className="absolute inset-0 scale-125 rounded-full bg-[#1D4ED8]/10 blur-xl filter" />
+ 
             <motion.img
               src={govlyxLogo}
               alt="Govlyx Logo"
-              className="z-10 h-32 w-32 drop-shadow-2xl"
+              className="z-10 h-28 w-28 drop-shadow-2xl opacity-80"
               whileHover={{ scale: 1.1, rotateY: 180 }}
               transition={{ duration: 0.8 }}
             />
           </motion.div>
-          <p className="mt-4 text-center text-sm font-bold tracking-widest opacity-40 uppercase">
+          <p className="mt-2 text-center text-xs font-black tracking-[0.4em] opacity-40 uppercase">
             Govlyx
           </p>
         </div>
