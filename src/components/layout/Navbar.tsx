@@ -165,7 +165,7 @@ const Navbar = () => {
               <Search size={18} />
             </button>
 
-            {/* CREATE */}
+            {/* CREATE (Desktop) */}
             <button
               onClick={() => setOpenCreate(true)}
               className="btn btn-sm bg-blue-700 hidden sm:flex gap-1 text-white"
@@ -174,7 +174,17 @@ const Navbar = () => {
               Create
             </button>
 
-            <NavLink to="/quick-chat" className="btn btn-ghost btn-sm hover:bg-blue-700/10">
+            {/* CREATE (Mobile) */}
+            <button
+              onClick={() => setOpenCreate(true)}
+              className="btn btn-ghost btn-sm sm:hidden hover:bg-blue-700/10"
+              aria-label="Create Post"
+            >
+              <Plus size={18} />
+            </button>
+
+            {/* QUICK CHAT (Desktop only) */}
+            <NavLink to="/quick-chat" className="btn btn-ghost btn-sm hover:bg-blue-700/10 hidden sm:flex">
               <MessageCircle size={18} />
             </NavLink>
 

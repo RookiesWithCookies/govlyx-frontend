@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  MessageSquare,
   Send,
   Reply,
   Trash2,
@@ -471,17 +470,13 @@ function SingleComment({
 export default function CommentSection({
   postId,
   postType,
-  commentCount: initialCount = 0,
   currentUsername,
   currentRole,
-  defaultOpen = false,
 }: CommentSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
   const [comments, setComments] = useState<CommentDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<number | undefined>();
-  const [count, setCount] = useState(initialCount);
   const [fetchedOnce, setFetchedOnce] = useState(false);
 
   const fetchComments = useCallback(
@@ -511,8 +506,8 @@ export default function CommentSection({
   );
 
   useEffect(() => {
-    if (open && !fetchedOnce) fetchComments();
-  }, [open, fetchedOnce, fetchComments]);
+    if (!fetchedOnce) fetchComments();
+  }, [fetchedOnce, fetchComments]);
 
   async function handleNewComment(text: string) {
     const endpoint =
@@ -523,16 +518,14 @@ export default function CommentSection({
     const res = await apiPost(endpoint, { text });
     const created: CommentDto = res?.data ?? res;
     setComments((prev) => [created, ...prev]);
-    setCount((n) => n + 1);
   }
 
   function handleReplyAdded(_parentId: number, _reply: CommentDto) {
-    setCount((n) => n + 1);
+    // Reply added
   }
 
   function handleDeleted(id: number) {
     setComments((prev) => prev.filter((c) => c.id !== id));
-    setCount((n) => Math.max(0, n - 1));
   }
 
   function handleUpdated(updated: CommentDto) {
@@ -542,80 +535,57 @@ export default function CommentSection({
   }
 
   return (
-    <div className="mt-2">
-      {/* Toggle bar */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs opacity-70 hover:opacity-100 hover:bg-base-300/40 transition-colors"
-      >
-        <MessageSquare size={14} />
-        <span className="font-medium">
-          {count > 0
-            ? `${count} comment${count !== 1 ? "s" : ""}`
-            : "Comments"}
-        </span>
-        {open ? (
-          <ChevronUp size={13} className="ml-auto" />
-        ) : (
-          <ChevronDown size={13} className="ml-auto" />
-        )}
-      </button>
+    <div className="mt-2 space-y-4 rounded-xl border border-base-300 bg-base-100 p-3">
+      {/* New comment input */}
+      <CommentInput
+        placeholder="Write a comment… (Ctrl+Enter to post)"
+        onSubmit={handleNewComment}
+      />
 
-      {/* Body */}
-      {open && (
-        <div className="mt-2 space-y-4 rounded-xl border border-base-300 bg-base-100 p-3">
-          {/* New comment input */}
-          <CommentInput
-            placeholder="Write a comment… (Ctrl+Enter to post)"
-            onSubmit={handleNewComment}
-          />
-
-          {loading && comments.length === 0 && (
-            <div className="flex items-center justify-center gap-2 py-6 text-sm opacity-50">
-              <Loader2 size={16} className="animate-spin" /> Loading comments…
-            </div>
-          )}
-
-          {!loading && fetchedOnce && comments.length === 0 && (
-            <p className="py-4 text-center text-sm opacity-40">
-              No comments yet. Be the first!
-            </p>
-          )}
-
-          {comments.length > 0 && (
-            <div className="space-y-4">
-              {comments.map((c) => (
-                <SingleComment
-                  key={c.id}
-                  comment={c}
-                  postId={postId}
-                  postType={postType}
-                  depth={0}
-                  currentUsername={currentUsername}
-                  currentRole={currentRole}
-                  onDeleted={handleDeleted}
-                  onUpdated={handleUpdated}
-                  onReplyAdded={handleReplyAdded}
-                />
-              ))}
-            </div>
-          )}
-
-          {hasMore && (
-            <button
-              onClick={() => fetchComments(cursor)}
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-base-300 py-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
-            >
-              {loading ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <ChevronDown size={13} />
-              )}
-              Load more comments
-            </button>
-          )}
+      {loading && comments.length === 0 && (
+        <div className="flex items-center justify-center gap-2 py-6 text-sm opacity-50">
+          <Loader2 size={16} className="animate-spin" /> Loading comments…
         </div>
+      )}
+
+      {!loading && fetchedOnce && comments.length === 0 && (
+        <p className="py-4 text-center text-sm opacity-40">
+          No comments yet. Be the first!
+        </p>
+      )}
+
+      {comments.length > 0 && (
+        <div className="space-y-4">
+          {comments.map((c) => (
+            <SingleComment
+              key={c.id}
+              comment={c}
+              postId={postId}
+              postType={postType}
+              depth={0}
+              currentUsername={currentUsername}
+              currentRole={currentRole}
+              onDeleted={handleDeleted}
+              onUpdated={handleUpdated}
+              onReplyAdded={handleReplyAdded}
+            />
+          ))}
+        </div>
+      )}
+
+      {hasMore && (
+        <button
+          onClick={() => fetchComments(cursor)}
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-base-300 py-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
+        >
+          {loading ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <ChevronDown size={13} />
+          )}
+          Load more comments
+        </button>
       )}
     </div>
   );

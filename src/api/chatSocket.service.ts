@@ -31,29 +31,29 @@ function buildAuthHeaders(): Record<string, string> {
 //   VITE_API_URL=http://localhost:8080
 //
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
-const WS_URL   = `${API_BASE}/ws`;
+const WS_URL = `${API_BASE}/ws`;
 
 // ── Handler types ─────────────────────────────────────────────────────────────
-type OnMessage = (msg: ChatMessageDto)   => void;
-type OnTyping  = (n: TypingNotification) => void;
-type OnMatch   = (n: MatchNotification)  => void;
-type OnError   = (msg: string)           => void;
+type OnMessage = (msg: ChatMessageDto) => void;
+type OnTyping = (n: TypingNotification) => void;
+type OnMatch = (n: MatchNotification) => void;
+type OnError = (msg: string) => void;
 
 export interface ChatSocketHandlers {
-  onMessage:       OnMessage;
-  onTyping:        OnTyping;
-  onMatchEvent:    OnMatch;
-  onError:         OnError;
-  onConnected?:    () => void;
+  onMessage: OnMessage;
+  onTyping: OnTyping;
+  onMatchEvent: OnMatch;
+  onError: OnError;
+  onConnected?: () => void;
   onDisconnected?: () => void;
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
 class ChatSocketService {
-  private client:        Client | null = null;
+  private client: Client | null = null;
   private subscriptions: StompSubscription[] = [];
-  private handlers:      ChatSocketHandlers | null = null;
+  private handlers: ChatSocketHandlers | null = null;
 
   /**
    * Activate STOMP client and register all subscription handlers.
@@ -120,7 +120,7 @@ class ChatSocketService {
 
       debug: import.meta.env.DEV
         ? (str) => console.debug("[STOMP]", str)
-        : () => {},
+        : () => { },
     });
 
     this.client.activate();

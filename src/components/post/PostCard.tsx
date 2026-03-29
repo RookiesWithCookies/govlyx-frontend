@@ -15,7 +15,6 @@ import {
   AlertCircle,
   BarChart2,
   Trash2,
-  UserPlus,
   ChevronLeft,
   ChevronRight,
   X,
@@ -189,7 +188,6 @@ type PostCardProps = {
   onResolve?: (postId: number, isResolved: boolean, message: string) => void;
   onVote?: (pollId: number, optionIds: number[]) => void;
   onDelete?: (postId: number) => void;
-  onAddUser?: (postId: number) => void;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -230,20 +228,22 @@ function ActionBtn({
   active = false,
   activeClass = "bg-[#1D4ED8]/15 text-[#1D4ED8]",
   disabled = false,
+  className,
   children,
 }: {
   onClick: () => void;
   active?: boolean;
   activeClass?: string;
   disabled?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-1 rounded-lg px-2 py-1 transition-colors disabled:opacity-40
-        ${active ? activeClass : "opacity-70 hover:opacity-100"}`}
+      className={`flex items-center justify-center transition-all disabled:opacity-40
+        ${active ? activeClass : "opacity-75 hover:opacity-100"} ${className || "gap-1 rounded-lg px-2 py-1"}`}
     >
       {children}
     </button>
@@ -347,7 +347,6 @@ function PollCard({
   onShare,
   onSave,
   onDelete,
-  onAddUser,
 }: {
   post: PollPost;
   currentUser?: CurrentUser;
@@ -355,7 +354,6 @@ function PollCard({
   onShare?: (postId: number) => void;
   onSave?: (postId: number, saved: boolean) => void;
   onDelete?: (postId: number) => void;
-  onAddUser?: (postId: number) => void;
 }) {
   const [selected, setSelected] = useState<number[]>(
     post.votedOptionIds ?? []
@@ -454,12 +452,15 @@ function PollCard({
     }
   }
 
-  function handleAddUser() {
-    if (onAddUser) {
-      onAddUser(post.id);
-      return;
+  async function handleJoinCommunity(cid: number) {
+    if (voting) return;
+    try {
+      await apiPost(`/api/communities/${cid}/join`, {});
+      alert("Successfully joined!");
+    } catch (err) {
+      console.error("Join failed", err);
+      alert("Could not join community.");
     }
-    alert("Follow feature coming soon!");
   }
 
   return (
@@ -470,20 +471,21 @@ function PollCard({
     >
       {/* Header */}
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        {post.communityId && post.communityName && (
-          <span className="flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
-            <Users size={11} /> {post.communityName}
-          </span>
+        {post.communityId && (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
+              <Users size={11} /> {post.communityName || "Community"}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleJoinCommunity(post.communityId!); }}
+              className="btn btn-xs bg-[#1D4ED8] text-white hover:bg-[#1D4ED8]/90 border-none rounded-full px-3 h-6 min-h-6 text-[10px] font-bold"
+            >
+              JOIN
+            </button>
+          </div>
         )}
         <span className="font-medium opacity-80 flex items-center gap-1">
           {post.userDisplayName || post.username}
-          <button
-            onClick={handleAddUser}
-            className="p-1 hover:bg-[#1D4ED8]/10 rounded-full text-[#1D4ED8] transition-colors"
-            title="Add User"
-          >
-            <UserPlus size={14} />
-          </button>
         </span>
         <span className="opacity-40">•</span>
         <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
@@ -635,11 +637,10 @@ export default function PostCard({
   onLike,
   onSave,
   onShare,
-  onComment,
+  // onComment, // silenced since comments are handled internally
   onResolve,
   onVote,
   onDelete,
-  onAddUser,
 }: PostCardProps) {
   const [liked, setLiked] = useState(
     !!(post as AnyPost)?.isLikedByCurrentUser
@@ -697,7 +698,6 @@ export default function PostCard({
         onShare={onShare}
         onSave={onSave}
         onDelete={onDelete}
-        onAddUser={onAddUser}
       />
     );
   }
@@ -823,12 +823,14 @@ export default function PostCard({
     }
   }
 
-  function handleAddUser() {
-    if (onAddUser) {
-      onAddUser(post.id);
-      return;
+  async function handleJoinCommunity(cid: number) {
+    try {
+      await apiPost(`/api/communities/${cid}/join`, {});
+      alert("Successfully joined!");
+    } catch (err) {
+      console.error("Join failed", err);
+      alert("Could not join community.");
     }
-    alert("Follow feature coming soon!");
   }
 
   const containerClass = isGovt
@@ -848,11 +850,18 @@ export default function PostCard({
     return urls;
   })();
   const hasMedia = allMediaUrls.length > 0;
+  const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
   // Image gallery state
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imgError, setImgError] = useState<Record<number, boolean>>({});
+  
+  // Comments toggle state
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  
+  // Description toggle state
+  const [expanded, setExpanded] = useState(false);
 
   function prevImage(e?: React.MouseEvent) {
     e?.stopPropagation();
@@ -868,114 +877,40 @@ export default function PostCard({
       <motion.div
         whileHover={{ y: -4 }}
         transition={{ duration: 0.2 }}
-        className={`${containerClass} h-full flex flex-col shadow-sm hover:shadow-md`}
+        className={`${containerClass} h-full flex flex-col p-4 sm:p-5 gap-4 shadow-sm hover:shadow-md`}
       >
-        {/* ── Media Gallery ── */}
-        {hasMedia && (
-          <div className="relative w-full overflow-hidden shrink-0 border-b border-base-300/50">
-            {/* Main image */}
-            <div
-              className="relative h-64 sm:h-72 cursor-pointer"
-              onClick={() => setLightboxOpen(true)}
-            >
-              {!imgError[activeImageIndex] ? (
-                <img
-                  src={allMediaUrls[activeImageIndex]}
-                  alt={`Post media ${activeImageIndex + 1}`}
-                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
-                  onError={() => setImgError((prev) => ({ ...prev, [activeImageIndex]: true }))}
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center bg-base-300">
-                  <ImageIcon size={48} className="opacity-30" />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-base-100/30 to-transparent pointer-events-none" />
-            </div>
-
-            {/* Nav arrows for multi-image */}
-            {allMediaUrls.length > 1 && (
-              <>
-                <button
-                  onClick={prevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-base-100/70 backdrop-blur-sm text-base-content shadow-md hover:bg-base-100 transition-all"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  onClick={nextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-base-100/70 backdrop-blur-sm text-base-content shadow-md hover:bg-base-100 transition-all"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </>
-            )}
-
-            {/* Image counter badge */}
-            {allMediaUrls.length > 1 && (
-              <div className="absolute bottom-3 right-3 rounded-full bg-base-100/70 backdrop-blur-sm px-2.5 py-1 text-xs font-medium text-base-content shadow-sm">
-                {activeImageIndex + 1}/{allMediaUrls.length}
-              </div>
-            )}
-
-            {/* Dot indicators for multi-image */}
-            {allMediaUrls.length > 1 && allMediaUrls.length <= 6 && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {allMediaUrls.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={(e) => { e.stopPropagation(); setActiveImageIndex(i); }}
-                    className={`h-2 rounded-full transition-all duration-300 ${i === activeImageIndex
-                      ? "w-5 bg-[#1D4ED8]"
-                      : "w-2 bg-base-content/30 hover:bg-base-content/50"
-                      }`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Bottom 50% - Details */}
-        <div className="flex flex-1 flex-col p-5">
-          {/* Header */}
-          <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        {/* ── 1. Top Header ── */}
+        <div className="flex items-start justify-between gap-2">
+          {/* User Info & Meta */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             {isGovt && (
               <span className="flex items-center gap-1 font-semibold text-info">
                 <BadgeCheck size={16} />
                 {(post as GovernmentPost).department}
               </span>
             )}
-            {isCommunity && (
-              <span className="flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
-                <Users size={11} />
-                {(post as CommunityPost).communityName}
-              </span>
+            {((post as any).communityId) && (
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2 py-0.5 text-xs font-semibold text-[#1D4ED8]">
+                  <Users size={11} />
+                  {(post as any).communityName || "Community"}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleJoinCommunity((post as any).communityId!); }}
+                  className="btn btn-xs bg-[#1D4ED8] text-white hover:bg-[#1D4ED8]/90 border-none rounded-full px-3 h-6 min-h-6 text-[10px] font-bold"
+                >
+                  JOIN
+                </button>
+              </div>
             )}
             {!isGovt && (
               <span className="font-medium opacity-80 flex items-center gap-1">
                 {post.userDisplayName || post.username}
-                <button
-                  onClick={handleAddUser}
-                  className="p-1 hover:bg-[#1D4ED8]/10 rounded-full text-[#1D4ED8] transition-colors"
-                  title="Add User"
-                >
-                  <UserPlus size={14} />
-                </button>
               </span>
             )}
             <span className="opacity-40">•</span>
             <span className="opacity-50">{post.timeAgo ?? "just now"}</span>
-            {(isIssue || isSocial || isCommunity) && (post as any).canDelete && (
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="ml-auto p-1 text-error hover:bg-error/10 rounded-md transition-colors disabled:opacity-50"
-                title="Delete Post"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
+            
             {(isIssue || isGovt) && (
               <>
                 <span className="opacity-40">•</span>
@@ -995,147 +930,237 @@ export default function PostCard({
               </>
             )}
             {showStatusBadge && (
-              <span className="ml-auto">
+              <span className="ml-1 shrink-0">
                 <StatusBadge status={(post as IssuePost).status} />
               </span>
             )}
           </div>
 
-          {/* Resolve banner */}
-          {govCanResolve && !resolving && (
-            <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs">
-              <span className="flex items-center gap-1.5 text-warning">
-                <AlertCircle size={13} />
-                This issue is assigned to your department
-              </span>
-              <button
-                onClick={() => setResolveOpen(true)}
-                className="btn btn-success btn-xs"
-              >
-                <CheckCircle2 size={12} /> Mark Resolved
-              </button>
-            </div>
-          )}
-
-          {/* Resolved notice */}
-          {isResolved && (
-            <div className="mb-3 flex items-center gap-1.5 rounded-lg bg-success/15 px-3 py-2 text-xs font-medium text-success">
-              <CheckCircle2 size={13} />
-              Issue resolved
-              {(post as IssuePost).resolvedAt && (
-                <span className="opacity-70">
-                  · {(post as IssuePost).resolvedAt}
-                </span>
+            {/* Right Actions: Delete */}
+            <div className="flex items-center gap-2 shrink-0">
+              {(isIssue || isSocial || isCommunity) && (post as any).canDelete && (
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="p-1.5 text-error hover:bg-error/10 rounded-md transition-colors disabled:opacity-50"
+                  title="Delete Post"
+                >
+                  <Trash2 size={16} />
+                </button>
               )}
             </div>
+        </div>
+
+        {/* ── Resolve Banner / Notice ── */}
+        {govCanResolve && !resolving && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs">
+            <span className="flex items-center gap-1.5 text-warning">
+              <AlertCircle size={13} />
+              This issue is assigned to your department
+            </span>
+            <button
+              onClick={() => setResolveOpen(true)}
+              className="btn btn-success btn-xs"
+            >
+              <CheckCircle2 size={12} /> Mark Resolved
+            </button>
+          </div>
+        )}
+        
+        {isResolved && (
+          <div className="flex items-center gap-1.5 rounded-lg bg-success/15 px-3 py-2 text-xs font-medium text-success">
+            <CheckCircle2 size={13} />
+            Issue resolved
+            {(post as IssuePost).resolvedAt && (
+              <span className="opacity-70">
+                · {(post as IssuePost).resolvedAt}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── 2. Content ── */}
+        <div className="text-sm">
+          <p className={`leading-relaxed whitespace-pre-wrap ${!expanded ? "line-clamp-1 break-words" : ""}`}>
+            {post.content}
+          </p>
+          {(post.content?.length ?? 0) > 80 && (
+            <button 
+              onClick={() => setExpanded(!expanded)} 
+              className="mt-1 text-xs font-semibold text-base-content/60 hover:text-base-content transition-colors"
+            >
+              {expanded ? "Show less" : "View more details"}
+            </button>
           )}
+        </div>
 
-          {/* Content */}
-          <p className="mb-3 text-sm leading-relaxed">{post.content}</p>
-
-
-          {/* Tagged depts */}
-          {isIssue && (post as IssuePost).taggedUsernames?.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {(post as IssuePost).taggedUsernames.map((name) => (
-                <span
-                  key={name}
-                  className="inline-flex items-center gap-1 rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info"
-                >
-                  <Building2 size={10} /> @{name}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Hashtags */}
-          {(isSocial || isCommunity) &&
-            "hashtags" in post &&
-            (post as SocialPost | CommunityPost).hashtags?.map((tag) => (
+        {/* ── Hashtags & Tagged Depts ── */}
+        {((isIssue && ("taggedUsernames" in post) && (post as IssuePost).taggedUsernames && (post as IssuePost).taggedUsernames.length > 0) || ((isSocial || isCommunity) && ("hashtags" in post) && (post as SocialPost | CommunityPost).hashtags && (post as SocialPost | CommunityPost).hashtags!.length > 0)) && (
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {isIssue && (post as IssuePost).taggedUsernames?.map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center gap-1 rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs text-info"
+              >
+                <Building2 size={10} /> @{name}
+              </span>
+            ))}
+            {(isSocial || isCommunity) && "hashtags" in post && (post as SocialPost | CommunityPost).hashtags?.map((tag) => (
               <span
                 key={tag}
-                className="mr-1.5 inline-block text-xs font-medium text-[#1D4ED8] opacity-80"
+                className="inline-block text-xs font-medium text-[#1D4ED8] opacity-80"
               >
                 {tag}
               </span>
             ))}
+          </div>
+        )}
 
-          <div className="flex-1" />
+        {/* ── 3. Split Media + Actions ── */}
+        <div className="flex flex-col sm:flex-row gap-4 mt-2">
+          
+          {/* Left: Media */}
+          {hasMedia && (
+            <div className="relative flex-[0.85] overflow-hidden shrink-0 rounded-2xl border border-base-300">
+             {/* Main image */}
+             <div
+               className="relative h-64 sm:h-80 cursor-pointer"
+               onClick={() => setLightboxOpen(true)}
+             >
+               {!imgError[activeImageIndex] ? (
+                 isVideoUrl(allMediaUrls[activeImageIndex]) ? (
+                   <video
+                     src={allMediaUrls[activeImageIndex]}
+                     controls
+                     className="h-full w-full object-contain bg-black"
+                     onClick={(e) => e.stopPropagation()}
+                     onError={() => setImgError((prev) => ({ ...prev, [activeImageIndex]: true }))}
+                   />
+                 ) : (
+                   <img
+                     src={allMediaUrls[activeImageIndex]}
+                     alt={`Post media ${activeImageIndex + 1}`}
+                     className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
+                     onError={() => setImgError((prev) => ({ ...prev, [activeImageIndex]: true }))}
+                   />
+                 )
+               ) : (
+                 <div className="h-full w-full flex items-center justify-center bg-base-300">
+                   <ImageIcon size={48} className="opacity-30" />
+                 </div>
+               )}
+               <div className="absolute inset-0 bg-gradient-to-t from-base-100/30 to-transparent pointer-events-none" />
+             </div>
 
-          {/* ── Action bar ── */}
-          <div className="mt-3 flex items-center gap-1 text-sm flex-wrap">
-            {/* Like */}
-            <ActionBtn onClick={handleLike} active={liked} disabled={isResolved}>
-              <ArrowUp size={16} />
-              <span>{likeCount}</span>
+             {/* Nav arrows for multi-image */}
+             {allMediaUrls.length > 1 && (
+               <>
+                 <button
+                   onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                   className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-base-100/70 backdrop-blur-sm text-base-content shadow-md hover:bg-base-100 transition-all z-10"
+                 >
+                   <ChevronLeft size={18} />
+                 </button>
+                 <button
+                   onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                   className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-base-100/70 backdrop-blur-sm text-base-content shadow-md hover:bg-base-100 transition-all z-10"
+                 >
+                   <ChevronRight size={18} />
+                 </button>
+               </>
+             )}
+
+             {/* Image counter badge */}
+             {allMediaUrls.length > 1 && (
+               <div className="absolute bottom-3 right-3 rounded-full bg-base-100/70 backdrop-blur-sm px-2.5 py-1 text-xs font-medium text-base-content shadow-sm z-10">
+                 {activeImageIndex + 1}/{allMediaUrls.length}
+               </div>
+             )}
+
+             {/* Dot indicators for multi-image */}
+             {allMediaUrls.length > 1 && allMediaUrls.length <= 6 && (
+               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                 {allMediaUrls.map((_, i) => (
+                   <button
+                     key={i}
+                     onClick={(e) => { e.stopPropagation(); setActiveImageIndex(i); }}
+                     className={`h-2 rounded-full transition-all duration-300 ${i === activeImageIndex
+                       ? "w-5 bg-[#1D4ED8]"
+                       : "w-2 bg-base-content/30 hover:bg-base-content/50"
+                       }`}
+                   />
+                 ))}
+               </div>
+             )}
+            </div>
+          )}
+
+          {/* Right: Actions */}
+          <div className={`flex flex-row sm:flex-col gap-2 shrink-0 self-start sm:w-[13%] w-full overflow-x-auto sm:overflow-visible pb-1 sm:pb-0 ${!hasMedia ? "sm:flex-row justify-start mt-2" : "justify-between"}`}>
+            <ActionBtn onClick={handleLike} active={liked} disabled={isResolved} className={hasMedia ? "flex-col py-2.5 sm:py-3 w-14 sm:w-full bg-base-300/30 hover:bg-base-300/60 rounded-xl" : "bg-base-300/30 px-3 border border-base-300 hover:bg-base-300/60"}>
+              <ArrowUp size={20} className="mb-0.5" />
+              <span className="text-[11px] font-semibold tracking-wide">{likeCount > 0 ? likeCount : "Like"}</span>
             </ActionBtn>
 
-            {/* Dislike — issues only */}
             {isIssue && (
               <ActionBtn
                 onClick={handleDislike}
                 active={disliked}
                 activeClass="bg-error/15 text-error"
                 disabled={isResolved}
+                className={hasMedia ? "flex-col py-2.5 sm:py-3 w-14 sm:w-full bg-base-300/30 hover:bg-base-300/60 rounded-xl" : "bg-base-300/30 px-3 border border-base-300 hover:bg-base-300/60"}
               >
-                <ArrowDown size={16} />
-                <span>{dislikeCount}</span>
+                <ArrowDown size={20} className="mb-0.5" />
+                <span className="text-[11px] font-semibold tracking-wide">{dislikeCount > 0 ? dislikeCount : "Dislike"}</span>
               </ActionBtn>
             )}
 
-            {/* Comment count badge */}
-            <ActionBtn onClick={() => onComment?.(post.id)}>
-              <MessageSquare size={16} />
-              <span>{post.commentCount}</span>
-            </ActionBtn>
-
-            {/* Save — NOT shown for issue posts (backend rule) */}
             {!isIssue && (
               <ActionBtn
                 onClick={handleSave}
                 active={saved}
                 activeClass="bg-accent/15 text-accent"
+                className={hasMedia ? "flex-col py-2.5 sm:py-3 w-14 sm:w-full bg-base-300/30 hover:bg-base-300/60 rounded-xl" : "bg-base-300/30 px-3 border border-base-300 hover:bg-base-300/60"}
               >
-                <Bookmark size={16} className={saved ? "fill-current" : ""} />
+                <Bookmark size={18} className={`mb-0.5 ${saved ? "fill-current" : ""}`} />
+                <span className="text-[11px] font-semibold tracking-wide">Save</span>
               </ActionBtn>
             )}
 
-            {/* Share */}
             <ActionBtn
               onClick={handleShare}
               active={copied}
               activeClass="text-success"
+              className={hasMedia ? "flex-col py-2.5 sm:py-3 w-14 sm:w-full bg-base-300/30 hover:bg-base-300/60 rounded-xl" : "bg-base-300/30 px-3 border border-base-300 hover:bg-base-300/60"}
             >
-              <Share2 size={16} />
-              <span className={copied ? "" : "hidden sm:inline"}>
-                {copied
-                  ? "Copied!"
-                  : shareCount > 0
-                    ? String(shareCount)
-                    : "Share"}
-              </span>
+              <Share2 size={18} className="mb-0.5" />
+              <span className="text-[11px] font-semibold tracking-wide">{copied ? "Copied" : shareCount > 0 ? shareCount : "Share"}</span>
+            </ActionBtn>
+
+            <ActionBtn onClick={() => setCommentsOpen(!commentsOpen)} className={hasMedia ? "flex-col py-2.5 sm:py-3 w-14 sm:w-full bg-base-300/30 hover:bg-[#1D4ED8]/10 hover:text-[#1D4ED8] rounded-xl" : "bg-base-300/30 px-3 border border-base-300 hover:bg-[#1D4ED8]/10 hover:text-[#1D4ED8]"}>
+              <MessageSquare size={18} className="mb-0.5" />
+              <span className="text-[11px] font-semibold tracking-wide">{post.commentCount > 0 ? post.commentCount : "Reply"}</span>
             </ActionBtn>
           </div>
-
-          {/* ── Comment Section ── */}
-          {/* Issue → /api/comments/post/{id}          */}
-          {/* Others → /api/comments/social-posts/{id} */}
-          {/* Resolved issue posts cannot receive new comments */}
-          {isIssue && isResolved ? (
-            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-base-300/50 px-3 py-2 text-xs opacity-50">
-              <MessageSquare size={12} />
-              Comments are closed — this issue has been resolved.
-            </div>
-          ) : (
-            <CommentSection
-              postId={post.id}
-              postType={commentPostType(post.variant)}
-              commentCount={post.commentCount}
-              currentUsername={currentUser?.username}
-              currentRole={currentUser?.role}
-            />
-          )}
         </div>
+
+        {/* ── 4. Comment Section ── */}
+        {isIssue && isResolved ? (
+          <div className="flex items-center gap-1.5 rounded-lg bg-base-300/50 px-3 py-2 text-xs opacity-50 mt-1 shrink-0">
+            <MessageSquare size={12} />
+            Comments are closed — this issue has been resolved.
+          </div>
+        ) : commentsOpen ? (
+          <CommentSection
+            postId={post.id}
+            postType={commentPostType(post.variant)}
+            commentCount={post.commentCount}
+            currentUsername={currentUser?.username}
+            currentRole={currentUser?.role}
+            defaultOpen={true}
+          />
+        ) : null}
+        
       </motion.div>
 
       <ResolveModal
