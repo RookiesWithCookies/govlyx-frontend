@@ -1,0 +1,25 @@
+﻿src/api/chatApi.service.ts(34,5): error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is enabled.
+src/api/chatSocket.service.ts(4,20): error TS7016: Could not find a declaration file for module 'sockjs-client'. 'C:/Users/Madhav/Desktop/govlyx-frontend-main/node_modules/sockjs-client/lib/entry.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/sockjs-client` if it exists or add a new declaration (.d.ts) file containing `declare module 'sockjs-client';`
+src/api/chatSocket.service.ts(9,8): error TS1261: Already included file name 'C:/Users/Madhav/Desktop/govlyx-frontend-main/src/types/chat.types.ts' differs from file name 'C:/Users/Madhav/Desktop/govlyx-frontend-main/src/types/Chat.types.ts' only in casing.
+  The file is in the program because:
+    Imported via "../types/chat.types" from file 'C:/Users/Madhav/Desktop/govlyx-frontend-main/src/api/chatSocket.service.ts'
+    Imported via "../types/chat.types" from file 'C:/Users/Madhav/Desktop/govlyx-frontend-main/src/api/chatApi.service.ts'
+    Imported via "../types/chat.types" from file 'C:/Users/Madhav/Desktop/govlyx-frontend-main/src/hooks/useChat.ts'
+    Imported via "../../types/chat.types" from file 'C:/Users/Madhav/Desktop/govlyx-frontend-main/src/components/layout/StrangerChat.tsx'
+    Matched by include pattern 'src' in 'C:/Users/Madhav/Desktop/govlyx-frontend-main/tsconfig.app.json'
+src/app/hooks.ts(1,10): error TS1484: 'TypedUseSelectorHook' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/auth/AuthLayout.tsx(1,10): error TS1484: 'ReactNode' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/community/CommunityCard.tsx(17,30): error TS6133: 'slug' is declared but its value is never read.
+src/components/ui/CreatePost.tsx(24,7): error TS6133: 'BASE_URL' is declared but its value is never read.
+src/components/ui/FeedFilterBar.tsx(11,24): error TS6133: 'active' is declared but its value is never read.
+src/hooks/useChat.ts(189,44): error TS2367: This comparison appears to be unintentional because the types '"TEXT" | "SYSTEM"' and '"CHAT_ENDED"' have no overlap.
+src/pages/admin/AdminDashboard.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/pages/Communities.tsx(3,31): error TS6133: 'HiOutlineArrowLeft' is declared but its value is never read.
+src/pages/Communities.tsx(12,8): error TS6133: 'MapPin' is declared but its value is never read.
+src/pages/Communities.tsx(14,47): error TS6133: 'Sparkles' is declared but its value is never read.
+src/pages/Communities.tsx(86,11): error TS6196: 'Paged' is declared but never used.
+src/pages/Communities.tsx(104,11): error TS6196: 'CommunitySearchResult' is declared but never used.
+src/pages/Communities.tsx(1501,9): error TS6133: 'stepTitle' is declared but its value is never read.
+src/pages/Communities.tsx(2207,18): error TS2741: Property 'id' is missing in type '{ key: any; slug: any; name: any; description: any; members: any; avatarUrl: any; privacy: any; onClick: () => void; }' but required in type 'CommunityCardProps'.
+src/pages/Communities.tsx(2327,24): error TS2741: Property 'id' is missing in type '{ key: number; slug: string; name: string; description: string; members: number; avatarUrl: string | null; privacy: "PUBLIC" | "SECRET" | "PRIVATE"; onClick: () => void; }' but required in type 'CommunityCardProps'.
