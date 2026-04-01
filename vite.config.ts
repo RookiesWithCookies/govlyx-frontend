@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://jan-sahayak-ai-84vh.onrender.com', 
+        target: 'https://jan-sahayak-ai-84vh.onrender.com',
         changeOrigin: true,
       },
       '/uploads': {

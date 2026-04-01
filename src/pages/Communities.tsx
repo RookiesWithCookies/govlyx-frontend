@@ -315,7 +315,8 @@ function InviteTab({
         method: "POST",
         headers: hdrs(),
         body: JSON.stringify({
-          inviteeUsername: selectedUser.username,
+          inviteeId: selectedUser.id,
+          inviteeUsername: selectedUser.displayName || selectedUser.username,
           message: message.trim() || undefined,
         }),
       });
@@ -388,7 +389,7 @@ function InviteTab({
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-5 space-y-6">
       <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ${isSecret
         ? "bg-purple-500/10 border-purple-500/30 text-purple-400"
         : "bg-orange-500/10 border-orange-500/30 text-orange-400"
@@ -424,7 +425,7 @@ function InviteTab({
                 <CheckCircle2 size={16} />
                 Invite sent to @{sendResult.inviteeUsername ?? "user"}!
               </div>
-              {sendResult.inviteLink && (
+              {sendResult.inviteLink && !sendResult.inviteeUsername && (
                 <div className="space-y-1.5">
                   <p className="text-xs opacity-60">Share this link:</p>
                   <div className="flex items-center gap-2">
@@ -496,10 +497,7 @@ function InviteTab({
                   <div className="flex items-center gap-3 rounded-xl border border-blue-700 bg-blue-700/10 p-3">
                     {avatar(selectedUser.username, selectedUser.profileImage)}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">@{selectedUser.username}</p>
-                      {selectedUser.displayName && selectedUser.displayName !== selectedUser.username && (
-                        <p className="text-xs opacity-60">{selectedUser.displayName}</p>
-                      )}
+                      <p className="text-sm font-semibold">{selectedUser.displayName || selectedUser.username}</p>
                     </div>
                     <button
                       className="btn btn-ghost btn-xs btn-circle text-error"
@@ -524,19 +522,18 @@ function InviteTab({
                     </div>
 
                     {suggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-xl shadow-xl overflow-hidden">
+                      <div className="absolute left-0 right-0 top-full mt-1 z-[100] bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden ring-1 ring-black/5">
                         {suggestions.map(u => (
                           <button
                             key={u.id}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-base-200 text-left transition-colors"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-base-200 text-left transition-colors border-b last:border-none border-base-300/50"
                             onMouseDown={e => { e.preventDefault(); setSelectedUser(u); setSearchQ(""); setSuggestions([]); }}
                           >
                             {avatar(u.username, u.profileImage)}
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">@{u.username}</p>
-                              {u.displayName && u.displayName !== u.username && (
-                                <p className="text-xs opacity-50 truncate">{u.displayName}</p>
-                              )}
+                              <p className="text-sm font-semibold text-base-content">
+                                {u.displayName || u.username}
+                              </p>
                             </div>
                           </button>
                         ))}
@@ -544,8 +541,9 @@ function InviteTab({
                     )}
 
                     {searchQ.trim().length >= 2 && !sugLoading && suggestions.length === 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-xl shadow-xl p-4 text-center text-sm opacity-50">
-                        No users found for "{searchQ}"
+                      <div className="absolute left-0 right-0 top-full mt-1 z-[100] bg-base-100 border border-base-300 rounded-xl shadow-2xl p-5 text-center ring-1 ring-black/5">
+                        <p className="text-sm font-medium text-base-content/60">No users found for "{searchQ}"</p>
+                        <p className="text-xs text-base-content/40 mt-1">Check the spelling or try a different name.</p>
                       </div>
                     )}
                   </div>
