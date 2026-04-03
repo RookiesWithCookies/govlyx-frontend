@@ -16,6 +16,8 @@ import QuickChatPage from "../pages/QuickChatPage";
 import { isSuperAdmin } from "../utils/auth";
 import Profile from "../pages/Profile";
 import Settings from "../pages/Settings";
+import NotificationsPage from "../pages/NotificationsPage";
+import PostDetail from "../pages/PostDetail";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 import { AcceptInvitePage } from "../pages/Communities";
@@ -58,7 +60,7 @@ const useTokenExpiryWatcher = () => {
   useEffect(() => {
     const check = () => {
       if (!isLoggedIn()) {
-        navigate("/login", { replace: true });
+        navigate("/login?error=expired", { replace: true });
       }
     };
 
@@ -74,7 +76,7 @@ const useTokenExpiryWatcher = () => {
         if (msUntilExpiry > 0) {
           const timeout = setTimeout(() => {
             localStorage.removeItem("token");
-            navigate("/login", { replace: true });
+            navigate("/login?error=expired", { replace: true });
           }, msUntilExpiry);
 
           return () => {
@@ -84,7 +86,7 @@ const useTokenExpiryWatcher = () => {
         }
       } catch {
         localStorage.removeItem("token");
-        navigate("/login", { replace: true });
+        navigate("/login?error=expired", { replace: true });
       }
     }
 
@@ -145,6 +147,8 @@ const AppRouter = () => {
           />
           <Route path="/quick-chat" element={<PageWrapper><QuickChatPage /></PageWrapper>} />
           <Route path="/profile" element={<PageWrapper><Profile /></PageWrapper>} />
+          <Route path="/notifications" element={<PageWrapper><NotificationsPage /></PageWrapper>} />
+          <Route path="/post/:id" element={<PageWrapper><PostDetail /></PageWrapper>} />
           <Route path="/settings" element={<PageWrapper><Settings /></PageWrapper>} />
           <Route path="/admin/dashboard" 
             element={

@@ -126,8 +126,8 @@ class ChatSocketService {
   }
 
   /** Send a text message → @MessageMapping("/chat.send") */
-  sendMessage(content: string): void {
-    this._publish("/app/chat.send", { content });
+  sendMessage(content: string, replyToId?: string): void {
+    this._publish("/app/chat.send", { content, replyToId });
   }
 
   /** Notify partner of typing → @MessageMapping("/chat.typing") */

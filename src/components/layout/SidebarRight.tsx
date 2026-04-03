@@ -65,7 +65,7 @@ const SidebarRight = () => {
           >
             {/* Glow effect */}
             <div className="absolute inset-0 scale-125 rounded-full bg-[#1D4ED8]/10 blur-xl filter" />
- 
+
             <motion.img
               src={govlyxLogo}
               alt="Govlyx Logo"

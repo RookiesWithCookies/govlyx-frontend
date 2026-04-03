@@ -2,7 +2,6 @@ import { Outlet } from "react-router-dom";
 import { motion } from "framer-motion";
 import Navbar from "./Navbar";
 import SidebarLeft from "./SidebarLeft";
-import SidebarRight from "./SidebarRight";
 import DepartmentRequestModal from "../modals/DepartmentRequestModal";
 
 const MainLayout = () => {
@@ -36,16 +35,9 @@ const MainLayout = () => {
                 </aside>
 
                 {/* CENTER */}
-                <main className="col-span-12 lg:col-span-9 xl:col-span-6 h-full overflow-y-auto">
+                <main className="col-span-12 lg:col-span-9 h-full overflow-y-auto">
                   <Outlet />
                 </main>
-
-                {/* RIGHT SIDEBAR */}
-                <aside className="hidden xl:block xl:col-span-3 h-full">
-                  <div className="h-full overflow-y-auto">
-                    <SidebarRight />
-                  </div>
-                </aside>
 
               </div>
             </div>

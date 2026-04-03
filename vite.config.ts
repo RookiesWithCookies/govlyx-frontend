@@ -20,6 +20,13 @@ export default defineConfig({
       '/uploads': {
         target: 'https://jan-sahayak-ai-84vh.onrender.com',
         changeOrigin: true,
+        secure: false, // For local dev against remote HTTPS
+        headers: {
+          'Origin': 'https://jan-sahayak-ai-84vh.onrender.com',
+          'Referer': 'https://jan-sahayak-ai-84vh.onrender.com',
+        },
+        // Avoid 500 errors by rewriting or simple proxy
+        rewrite: (path) => path,
       }
     },
   },

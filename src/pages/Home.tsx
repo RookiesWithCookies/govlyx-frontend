@@ -2,105 +2,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Flame, Clock, ArrowUp, SlidersHorizontal, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PostCard from "../components/post/PostCard";
-import type { AnyPost, SocialPost, GovernmentPost } from "../components/post/PostCard";
+import type { AnyPost } from "../components/post/PostCard";
 import EmptyState from "../components/ui/EmptyState";
-import Skeleton from "../components/ui/Skeleton";
+import PostSkeleton from "../components/post/PostSkeleton";
+import axiosInstance from "../api/axiosConfig";
 
-type FeedTab = "all" | "location" | "following" | "hot" | "new" | "top" | "for-you" | "official";
 
-function getAuthToken(): string | null {
-  return localStorage.getItem("token") || "demo-token-123";
-}
+import { toPostCardPost } from "../utils/postUtils";
 
-function toPostCardPost(dto: any): AnyPost {
-  if (dto.isBroadcastPost || dto.broadcastScope) {
-    return {
-      ...dto,
-      variant: "government",
-      department: dto.department ?? dto.userDisplayName ?? dto.username,
-      isGovernmentBroadcast: true,
-      commentCount: dto.commentCount ?? 0,
-      likeCount: dto.likeCount ?? 0,
-      shareCount: dto.shareCount ?? 0,
-    } as GovernmentPost;
-  }
-  if (dto.targetPincode || dto.issueType || dto.citizenId) {
-    return {
-      ...dto,
-      variant: "issue",
-      commentCount: dto.commentCount ?? 0,
-      likeCount: dto.likeCount ?? 0,
-      shareCount: dto.shareCount ?? 0,
-    } as AnyPost;
-  }
-
-  if (dto.isPoll && dto.pollData) {
-    const pd = dto.pollData;
-    const author = dto.author;
-    return {
-      id: dto.id,
-      content: dto.content,
-      timeAgo: dto.timeAgo ?? (dto.createdAt ? undefined : "just now"),
-      username: author?.username ?? dto.username ?? "",
-      userDisplayName: author?.displayName ?? dto.userDisplayName ?? "",
-      userProfileImage: author?.profileImage ?? dto.userProfileImage ?? "",
-      likeCount: dto.likeCount ?? 0,
-      commentCount: dto.commentCount ?? 0,
-      shareCount: dto.shareCount ?? 0,
-      variant: "poll",
-      pollId: pd.pollId,
-      question: pd.question ?? dto.content,
-      options: (pd.options ?? []).map((o: any) => ({
-        id: o.id,
-        optionText: o.optionText,
-        voteCount: o.voteCount ?? 0,
-        percentage: o.percentage ?? 0,
-      })),
-      totalVotes: pd.totalVotes ?? 0,
-      allowMultipleVotes: pd.allowMultipleVotes ?? false,
-      isExpired: pd.isExpired ?? false,
-      expiresAt: pd.expiresAt,
-      timeLeft: pd.timeLeft,
-      userHasVoted: pd.userHasVoted ?? false,
-      votedOptionIds: pd.votedOptionIds ?? [],
-      showResults: pd.showResults ?? false,
-      isSaved: dto.isSavedByCurrentUser ?? dto.isSaved ?? false,
-      isLikedByCurrentUser: dto.isLikedByCurrentUser ?? false,
-      canDelete: dto.canDelete ?? false,
-      canEdit: dto.canEdit ?? false,
-    } as any;
-  }
-
-  return { ...dto, variant: "social" } as SocialPost;
-}
 
 const FEED_SIZE = 20;
 
-const PostSkeleton = () => {
-  return (
-    <div className="w-full rounded-3xl border border-base-300 bg-base-200 p-6 space-y-4 animate-pulse shadow-sm flex flex-col justify-between">
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="space-y-1.5 flex-1">
-            <Skeleton className="h-4 w-1/3" />
-            <Skeleton className="h-3 w-1/4 opacity-50" />
-          </div>
-        </div>
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-4/6 opacity-70" />
-      </div>
-      <div className="flex gap-4 pt-4 border-t border-base-300/50">
-        <Skeleton className="h-8 w-16 rounded-lg" />
-        <Skeleton className="h-8 w-16 rounded-lg" />
-        <Skeleton className="h-8 w-16 rounded-lg" />
-      </div>
-    </div>
-  );
-};
 
-function useFeed(tab: FeedTab) {
+function useFeed(sourceTab: string, sortTab: string) {
   const [posts, setPosts] = useState<AnyPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
@@ -113,87 +27,58 @@ function useFeed(tab: FeedTab) {
     async (cursor: number | null, replace: boolean) => {
       setLoading(true);
       setError(null);
-      if (replace) setInitialLoading(true);
+      if (replace) {
+        setInitialLoading(true);
+        setPosts([]);
+      }
+
       try {
-        const token = getAuthToken();
-        const params = new URLSearchParams({ limit: String(FEED_SIZE) });
-        if (cursor !== null) params.set("beforeId", String(cursor));
-        if (tab === "hot" || tab === "new" || tab === "top") params.set("sort", tab);
+        const params = {
+          sort: sortTab.toUpperCase(),
+          size: FEED_SIZE,
+          ...(cursor !== null && { lastPostId: cursor })
+        };
+        
+        // Map frontend tabs to backend endpoints
+        let endpoint = "/api/v1/feed/for-you";
+        if (sourceTab === "location") endpoint = "/api/v1/feed/local";
+        else if (sourceTab === "following") endpoint = "/api/v1/feed/following";
+        else if (sourceTab === "official") endpoint = "/api/v1/feed/official"; 
 
-        let endpoints: string[] = [];
-        if (tab === "for-you") {
-          endpoints = [
-            `/api/feeds/enhanced/mixed`,
-            `/api/social-posts/feed/home`,
-            `/api/social-posts/feed/trending`,
-            `/api/social-posts/my-posts`
-          ];
-        } else if (tab === "location") {
-          endpoints = [`/api/feeds/enhanced/area`, `/api/social-posts/feed/local`, `/api/social-posts/my-posts`];
-        } else if (tab === "following") {
-          endpoints = [`/api/social-posts/feed/home`];
-        } else if (tab === "official") {
-          endpoints = [`/api/feeds/enhanced/country`];
-        } else {
-          endpoints = [
-            `/api/feeds/enhanced/mixed`,
-            `/api/social-posts/feed/home`,
-            `/api/social-posts/feed/trending`,
-            `/api/social-posts/my-posts`
-          ];
+        const res = await axiosInstance.get(endpoint, { params });
+        const json = res.data;
+        
+        // ── Robust Data Mapping ───────────────────────────────────────────────
+        /** 
+         * Logic:
+         * 1. If wrapped in ApiResponse: { success: true, data: { data: [...], hasMore: true } }
+         * 2. If direct PaginatedResponse: { data: [...], hasMore: true } 
+         */
+        const isWrapped = json.success !== undefined && json.data !== undefined;
+        const container = isWrapped ? json.data : json;
+        
+        // Identify the list of posts
+        let items: any[] = [];
+        if (Array.isArray(container)) {
+          items = container;
+        } else if (container && typeof container === "object") {
+          items = container.data ?? container.content ?? [];
         }
-
-        const responses = await Promise.all(
-          endpoints.map((ep) =>
-            fetch(`${ep}?${params}`, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            }).catch(() => null)
-          )
-        );
-
-        let mergedData: any[] = [];
-        let anyHasMore = false;
-        let newCursor: number | null = null;
-        let authError = false;
-
-        for (const res of responses) {
-          if (!res) continue;
-          if (res.status === 401 || res.status === 403) {
-            authError = true;
-            continue;
-          }
-          if (!res.ok) continue;
-
-          const data: any = await res.json().catch(() => ({}));
-          const pageData = data.data ?? data;
-          const items = pageData.content ?? pageData.items ?? [];
-          mergedData = [...mergedData, ...items];
-          if (pageData.hasMore || pageData.hasNextPage) anyHasMore = true;
-
-          const next = pageData.nextCursor ?? pageData.lastId ?? pageData.nextCursorId;
-          if (next && (!newCursor || next < newCursor)) {
-            newCursor = next;
-          }
-        }
-
-        if (authError && mergedData.length === 0) {
-          setFatalError(true);
-          setHasMore(false);
-          throw new Error("Not authenticated — please log in.");
-        }
-
-        const mapped = mergedData
-          .map(toPostCardPost)
-          .sort((a, b) => b.id - a.id);
-
+        
+        const mapped = items.map(toPostCardPost);
+        
         setPosts((prev) => {
           const combined = replace ? mapped : [...prev, ...mapped];
-          const unique = Array.from(new Map(combined.map((item) => [item.id + "-" + item.variant, item])).values());
-          return unique;
+          const map = new Map<string, AnyPost>();
+          combined.forEach((item: AnyPost) => {
+            map.set(item.id + "-" + item.variant, item);
+          });
+          return Array.from(map.values());
         });
 
-        setHasMore(anyHasMore);
-        setNextCursor(newCursor);
+        // Extract metadata from the container layer (not the list layer)
+        setHasMore(container?.hasMore ?? false);
+        setNextCursor(container?.nextCursor ?? null);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load feed");
         setHasMore(false);
@@ -202,12 +87,12 @@ function useFeed(tab: FeedTab) {
         setInitialLoading(false);
       }
     },
-    [tab]
+    [sourceTab, sortTab]
   );
 
   useEffect(() => {
     fetchPage(null, true);
-  }, [tab, fetchPage]);
+  }, [fetchPage]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore && !fatalError) fetchPage(nextCursor, false);
@@ -228,7 +113,11 @@ function useFeed(tab: FeedTab) {
     const mapped = toPostCardPost(rawPost);
     setPosts((prev) => {
       const combined = [mapped, ...prev] as AnyPost[];
-      return Array.from(new Map(combined.map((item) => [item.id + "-" + item.variant, item])).values());
+      const map = new Map<string, AnyPost>();
+      combined.forEach((item: AnyPost) => {
+        map.set(item.id + "-" + item.variant, item);
+      });
+      return Array.from(map.values());
     });
   }, []);
 
@@ -271,14 +160,8 @@ const Home = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
 
-  const getBackendTab = (): FeedTab => {
-    if (sourceTab === "all") return sortTab;
-    if (sourceTab === "location") return "for-you";
-    return sourceTab;
-  };
-
   const { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost, setPosts } =
-    useFeed(getBackendTab());
+    useFeed(sourceTab, sortTab);
 
   const handleLike = useCallback((postId: number, liked: boolean) => {
     const post = posts.find((p) => p.id === postId);
@@ -306,14 +189,10 @@ const Home = () => {
     if (post.variant === "issue") endpoint = `/api/posts/${postId}`;
     else if (post.variant === "social" && post.isPoll) endpoint = `/api/polls/${post.pollId}`;
     try {
-      const token = getAuthToken();
-      const res = await fetch(endpoint, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) setPosts(prev => prev.filter(p => p.id !== postId));
+      const res = await axiosInstance.delete(endpoint);
+      if (res.status === 200 || res.status === 204) setPosts(prev => prev.filter(p => p.id !== postId));
       else {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData = res.data || {};
         alert(errorData.message || "Failed to delete post.");
       }
     } catch (err) {
@@ -321,10 +200,6 @@ const Home = () => {
       alert("An error occurred while deleting the post.");
     }
   }, [posts, setPosts]);
-
-  const handleAddUser = useCallback((_postId: number) => {
-    alert("This feature (Add/Follow User) is coming soon!");
-  }, []);
 
   useEffect(() => {
     const onPostCreated = (e: Event) => {
@@ -440,7 +315,6 @@ const Home = () => {
                 onShare={handleShare}
                 onComment={handleComment}
                 onDelete={handleDelete}
-                onAddUser={handleAddUser}
               />
             </div>
           ))

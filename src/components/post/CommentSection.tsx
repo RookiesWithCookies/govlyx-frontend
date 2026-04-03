@@ -1,18 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  MessageSquare,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+} from "react";
+import {
   Send,
-  Reply,
   Trash2,
   Pencil,
   ChevronDown,
-  ChevronUp,
   X,
   Loader2,
-  CornerDownRight,
+  MessageSquare,
+  SmilePlus,
+  Sparkles,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-// ─── auth helper ──────────────────────────────────────────────────────────────
+// ─── auth helpers ─────────────────────────────────────────────────────────────
 function authHeaders(): HeadersInit {
   const token =
     localStorage.getItem("authToken") ?? localStorage.getItem("token") ?? "";
@@ -37,8 +43,7 @@ async function apiPost(url: string, body: unknown) {
     let msg = `${res.status}`;
     try {
       const errRes = await res.json();
-      const details = errRes.error ? ` [${errRes.error}]` : "";
-      msg += ` - ${errRes.message || JSON.stringify(errRes)}${details}`;
+      msg += ` - ${errRes.message || JSON.stringify(errRes)}`;
     } catch {
       msg += ` - ${await res.text()}`;
     }
@@ -63,12 +68,8 @@ async function apiDelete(url: string) {
 }
 
 // ─── types ────────────────────────────────────────────────────────────────────
-// "post"         → /api/comments/post/{id}          (Issue posts)
-// "social-posts" → /api/comments/social-posts/{id}  (Social / Community / Govt / Poll)
 export type PostType = "post" | "social-posts";
 
-// Backend CommentDto uses `text` (not `content`) and nests user info
-// under `author: { username, displayName, ... }` via AuthorDto.
 export type AuthorDto = {
   username: string;
   displayName?: string;
@@ -78,10 +79,10 @@ export type AuthorDto = {
 
 export type CommentDto = {
   id: number;
-  text: string;                      // backend field is `text`, not `content`
+  text: string;
   createdAt: string;
   updatedAt?: string;
-  author: AuthorDto;                  // nested, not flat username/userDisplayName
+  author: AuthorDto;
   parentCommentId?: number | null;
   replyCount?: number;
   replies?: CommentDto[];
@@ -93,7 +94,6 @@ type PaginatedResponse<T> = {
   nextCursor?: number;
 };
 
-// ─── props ────────────────────────────────────────────────────────────────────
 type CommentSectionProps = {
   postId: number;
   postType: PostType;
@@ -111,22 +111,105 @@ function timeAgo(raw: string | undefined): string {
   const diff = Date.now() - d.getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return `${Math.floor(days / 7)}w`;
 }
 
-// Reads display name from nested AuthorDto.
-// Falls back to author.username if displayName is absent.
-function displayName(comment: CommentDto): string {
-  return comment.author?.displayName ?? comment.author?.username ?? "Unknown";
+function getDisplayName(c: CommentDto): string {
+  return c.author?.displayName ?? c.author?.username ?? "Unknown";
+}
+
+function getAvatarSrc(username: string | undefined, profileImageUrl?: string): string {
+  return (
+    profileImageUrl ??
+    `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(
+      username ?? "?"
+    )}`
+  );
 }
 
 const LIMIT = 10;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CommentInput
+// Variants for animations
+// ═══════════════════════════════════════════════════════════════════════════════
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10, scale: 0.98 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring",
+      stiffness: 260,
+      damping: 20,
+    },
+  },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.15 } },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Auto-grow textarea
+// ═══════════════════════════════════════════════════════════════════════════════
+function AutoTextarea({
+  value,
+  onChange,
+  onKeyDown,
+  placeholder,
+  disabled,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  placeholder: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  useEffect(() => {
+    if (autoFocus) ref.current?.focus();
+  }, [autoFocus]);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      disabled={disabled}
+      className="w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-base-content/40 disabled:opacity-50"
+      style={{ minHeight: "24px", maxHeight: "200px" }}
+    />
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CommentInput — premium pill-style composer
 // ═══════════════════════════════════════════════════════════════════════════════
 function CommentInput({
   placeholder,
@@ -135,6 +218,7 @@ function CommentInput({
   onCancel,
   submitLabel = "Post",
   autoFocus = false,
+  avatarSeed,
 }: {
   placeholder: string;
   initialValue?: string;
@@ -142,15 +226,14 @@ function CommentInput({
   onCancel?: () => void;
   submitLabel?: string;
   autoFocus?: boolean;
+  avatarSeed?: string;
 }) {
   const [text, setText] = useState(initialValue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const [focused, setFocused] = useState(autoFocus);
 
-  useEffect(() => {
-    if (autoFocus) ref.current?.focus();
-  }, [autoFocus]);
+  const avatarUrl = getAvatarSrc(avatarSeed);
 
   async function submit() {
     const trimmed = text.trim();
@@ -160,6 +243,7 @@ function CommentInput({
     try {
       await onSubmit(trimmed);
       setText("");
+      setFocused(false);
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Something went wrong");
     } finally {
@@ -167,44 +251,97 @@ function CommentInput({
     }
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      submit();
+    }
+    if (e.key === "Escape") onCancel?.();
   }
 
   return (
-    <div className="space-y-1.5">
-      <textarea
-        ref={ref}
-        rows={2}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        disabled={busy}
-        className="textarea textarea-bordered w-full resize-none text-sm leading-snug"
+    <div className="flex items-start gap-3">
+      {/* Current user avatar */}
+      <img
+        src={avatarUrl}
+        alt="You"
+        className="w-9 h-9 rounded-full shrink-0 object-cover border-2 border-primary/10 shadow-sm mt-0.5"
       />
-      {error && <p className="text-xs text-error">{error}</p>}
-      <div className="flex items-center justify-end gap-2">
-        {onCancel && (
-          <button onClick={onCancel} disabled={busy} className="btn btn-ghost btn-xs">
-            <X size={13} /> Cancel
-          </button>
-        )}
-        <button
-          onClick={submit}
-          disabled={busy || !text.trim()}
-          className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-xs gap-1"
+
+      <div className="flex-1 min-w-0">
+        <div
+          className={`relative rounded-2xl border transition-all duration-300 ${
+            focused
+              ? "border-primary/50 bg-base-100 shadow-[0_0_15px_-3px_rgba(29,78,216,0.1)] ring-4 ring-primary/5"
+              : "border-base-content/10 bg-base-200/40 hover:border-base-content/20"
+          }`}
         >
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-          {submitLabel}
-        </button>
+          <div className="px-4 pt-3.5 pb-2.5">
+            <AutoTextarea
+              value={text}
+              onChange={setText}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder}
+              disabled={busy}
+              autoFocus={autoFocus}
+              onFocus={() => setFocused(true)}
+            />
+          </div>
+
+          <AnimatePresence>
+            {(focused || text.length > 0) && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="flex items-center justify-between gap-4 border-t border-base-content/5 px-4 py-2.5">
+                  <div className="flex flex-col">
+                    {error ? (
+                      <p className="text-[10px] text-error font-medium animate-pulse">{error}</p>
+                    ) : (
+                      <p className="text-[10px] text-base-content/40 flex items-center gap-1">
+                        <Sparkles size={10} className="text-primary/60" />
+                        Ctrl+Enter to send
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {onCancel && (
+                      <button
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="btn btn-ghost btn-xs rounded-full h-8 px-3 text-[11px] font-semibold text-base-content/60 hover:bg-base-200"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      onClick={submit}
+                      disabled={busy || !text.trim()}
+                      className="flex items-center gap-2 rounded-full bg-primary h-8 px-4 text-[11px] font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 disabled:grayscale disabled:scale-100"
+                    >
+                      {busy ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Send size={12} />
+                      )}
+                      {submitLabel}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SingleComment — one comment row with edit / delete / reply / nested replies
+// SingleComment
 // ═══════════════════════════════════════════════════════════════════════════════
 type SingleCommentProps = {
   comment: CommentDto;
@@ -239,11 +376,12 @@ function SingleComment({
     (comment.replyCount ?? 0) > 0 && (comment.replies ?? []).length === 0
   );
   const [deleting, setDeleting] = useState(false);
-
-  // Owner check reads from comment.author.username (nested AuthorDto)
+  
   const isOwner = !!currentUsername && comment.author?.username === currentUsername;
   const isAdmin = currentRole === "ROLE_ADMIN";
   const replyCount = comment.replyCount ?? replies.length;
+  const authorName = getDisplayName(comment);
+  const avatarSrc = getAvatarSrc(comment.author?.username, comment.author?.profileImageUrl);
 
   async function loadReplies(cursor?: number) {
     setLoadingReplies(true);
@@ -251,20 +389,25 @@ function SingleComment({
       const params = new URLSearchParams({ limit: String(LIMIT) });
       if (cursor) params.set("beforeId", String(cursor));
       const res = await apiFetch(`/api/comments/${comment.id}/replies?${params}`);
-      const page: PaginatedResponse<CommentDto> = res?.data ?? res;
-      const fetched: CommentDto[] = page?.content ?? [];
+      
+      // Robust extraction — handles ApiResponse wrapper and PaginatedResponse
+      const container = res?.data ?? res;
+      const fetched: CommentDto[] = Array.isArray(container)
+        ? container
+        : (container?.data ?? container?.content ?? []);
+        
       setReplies((prev) => (cursor ? [...prev, ...fetched] : fetched));
-      setHasMoreReplies(page?.hasMore ?? false);
-      setRepliesCursor(page?.nextCursor);
+      setHasMoreReplies(container?.hasMore ?? false);
+      setRepliesCursor(container?.nextCursor);
     } catch {
-      // silently ignore
+      // ignore
     } finally {
       setLoadingReplies(false);
     }
   }
 
   function toggleReplies() {
-    if (!repliesOpen && replies.length === 0 && replyCount > 0) {
+    if (!repliesOpen && replies.length === 0 && (comment.replyCount ?? 0) > 0) {
       loadReplies();
     }
     setRepliesOpen((v) => !v);
@@ -275,11 +418,7 @@ function SingleComment({
       postType === "post"
         ? `/api/comments/post/${postId}`
         : `/api/comments/social-posts/${postId}`;
-    // Backend CommentCreateDto uses `text` + `parentCommentId`
-    const res = await apiPost(endpoint, {
-      text,
-      parentCommentId: comment.id,
-    });
+    const res = await apiPost(endpoint, { text, parentCommentId: comment.id });
     const created: CommentDto = res?.data ?? res;
     setReplies((prev) => [created, ...prev]);
     setRepliesOpen(true);
@@ -288,7 +427,6 @@ function SingleComment({
   }
 
   async function handleEdit(text: string) {
-    // Backend CommentUpdateDto uses `text`
     const res = await apiPut(`/api/comments/${comment.id}`, { text });
     const updated: CommentDto = res?.data ?? res;
     onUpdated({ ...comment, text: updated.text });
@@ -296,7 +434,7 @@ function SingleComment({
   }
 
   async function handleDelete() {
-    if (!window.confirm("Delete this comment?")) return;
+    if (!window.confirm("Are you sure you want to delete this comment?")) return;
     setDeleting(true);
     try {
       await apiDelete(`/api/comments/${comment.id}`);
@@ -306,167 +444,192 @@ function SingleComment({
     }
   }
 
-  const indentClass =
-    depth === 0 ? "" : "ml-4 border-l-2 border-base-300 pl-3";
-
-  const authorName = displayName(comment);
-  const avatarSrc = comment.author?.profileImageUrl
-    || `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(comment.author?.username ?? "?")}`;
-
   return (
-    <div className={`${indentClass} space-y-1`}>
-      {/* Comment bubble */}
-      <div className="flex items-start gap-2.5">
-        {/* Avatar */}
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full overflow-hidden bg-base-200 border border-base-300">
-          <img src={avatarSrc} alt={authorName} className="w-full h-full object-cover" />
+    <motion.div
+      variants={itemVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      className={`${depth > 0 ? "border-l-[1.5px] border-base-content/8 pl-5 ml-4.5" : ""}`}
+    >
+      <div className="flex items-start gap-3 group">
+        {/* Avatar with subtle glow */}
+        <div className="relative shrink-0">
+          <img
+            src={avatarSrc}
+            alt={authorName}
+            className="w-8.5 h-8.5 rounded-full object-cover border border-base-content/5 bg-base-200 mt-0.5"
+          />
+          {depth === 0 && <div className="absolute inset-0 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.02)] pointer-events-none" />}
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex items-baseline gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold">{authorName}</span>
-            <span className="text-xs opacity-40">{timeAgo(comment.createdAt)}</span>
-            {comment.updatedAt && comment.updatedAt !== comment.createdAt && (
-              <span className="text-xs opacity-30 italic">(edited)</span>
-            )}
-          </div>
-
-          {/* Content or edit box */}
           {editing ? (
-            <div className="mt-1">
+            <div className="mt-0.5">
               <CommentInput
-                placeholder="Edit your comment…"
+                placeholder="Update your thought…"
                 initialValue={comment.text}
                 onSubmit={handleEdit}
                 onCancel={() => setEditing(false)}
-                submitLabel="Save"
+                submitLabel="Update"
                 autoFocus
+                avatarSeed={currentUsername}
               />
             </div>
           ) : (
-            <p className="mt-0.5 text-sm leading-snug whitespace-pre-wrap break-words">
-              {comment.text}
-            </p>
-          )}
+            <>
+              {/* Comment bubble with Glassmorphism */}
+              <div className="inline-block max-w-[95%] rounded-2xl rounded-tl-sm bg-base-200/50 backdrop-blur-sm border border-base-content/5 px-4 py-3 shadow-sm hover:bg-base-200/80 transition-colors">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold text-primary/90 tracking-tight">{authorName}</span>
+                  {comment.author?.username === "admin" && (
+                    <span className="bg-primary/10 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded-full">STAFF</span>
+                  )}
+                </div>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-base-content/85">
+                  {comment.text}
+                </p>
+              </div>
 
-          {/* Action row */}
-          {!editing && (
-            <div className="mt-1 flex items-center gap-3 text-xs">
-              {depth < 4 && (
+              {/* Meta + Actions */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-[10px] font-semibold text-base-content/40 uppercase tracking-wider">
+                <span className="font-medium normal-case tracking-normal">{timeAgo(comment.createdAt)}</span>
+                
+                {comment.updatedAt && comment.updatedAt !== comment.createdAt && (
+                  <span className="italic normal-case opacity-60">Edited</span>
+                )}
+
                 <button
                   onClick={() => setShowReplyBox((v) => !v)}
-                  className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity"
+                  className="hover:text-primary transition-colors hover:scale-105 active:scale-95"
                 >
-                  <Reply size={12} /> Reply
+                  Reply
                 </button>
-              )}
-              {isOwner && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  <Pencil size={12} /> Edit
-                </button>
-              )}
-              {(isOwner || isAdmin) && (
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="flex items-center gap-1 opacity-50 hover:text-error hover:opacity-100 transition-opacity"
-                >
-                  {deleting ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={12} />
-                  )}
-                  Delete
-                </button>
-              )}
-              {replyCount > 0 && (
-                <button
-                  onClick={toggleReplies}
-                  className="flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity ml-1"
-                >
-                  <CornerDownRight size={12} />
-                  {repliesOpen
-                    ? "Hide"
-                    : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
-                  {repliesOpen ? (
-                    <ChevronUp size={11} />
-                  ) : (
-                    <ChevronDown size={11} />
-                  )}
-                </button>
-              )}
-            </div>
+
+                {isOwner && (
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="flex items-center gap-1 hover:text-primary transition-colors hover:scale-105 active:scale-95"
+                  >
+                    <Pencil size={10} /> Edit
+                  </button>
+                )}
+
+                {(isOwner || isAdmin) && (
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex items-center gap-1 hover:text-error transition-colors hover:scale-105 active:scale-95 disabled:opacity-30"
+                  >
+                    {deleting ? (
+                      <Loader2 size={10} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={10} />
+                    )}
+                    Delete
+                  </button>
+                )}
+
+                {replyCount > 0 && (
+                  <button
+                    onClick={toggleReplies}
+                    className={`flex items-center gap-1.5 transition-all py-0.5 px-2 rounded-full ${
+                      repliesOpen ? "bg-primary/10 text-primary shadow-sm" : "hover:text-primary"
+                    }`}
+                  >
+                    {repliesOpen ? <ChevronDown size={12} className="rotate-180" /> : <MessageSquare size={10} />}
+                    {repliesOpen ? "Hide" : `${replyCount} ${replyCount === 1 ? "Reply" : "Replies"}`}
+                  </button>
+                )}
+              </div>
+            </>
           )}
+
+          {/* Reply Box */}
+          <AnimatePresence>
+            {showReplyBox && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                animate={{ opacity: 1, height: "auto", marginTop: 12 }}
+                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                className="overflow-hidden"
+              >
+                <CommentInput
+                  placeholder={`Replying to ${authorName}…`}
+                  onSubmit={handleReply}
+                  onCancel={() => setShowReplyBox(false)}
+                  submitLabel="Reply"
+                  autoFocus
+                  avatarSeed={currentUsername}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Replies Container */}
+          <AnimatePresence>
+            {repliesOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                className="overflow-hidden mt-4 space-y-4"
+              >
+                {loadingReplies && replies.length === 0 && (
+                  <div className="flex items-center gap-2.5 py-1 text-xs opacity-60 ml-4">
+                    <Loader2 size={12} className="animate-spin text-primary" />
+                    <span className="font-medium">Fetching conversation…</span>
+                  </div>
+                )}
+                
+                <motion.div
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="space-y-4"
+                >
+                  {replies.map((reply) => (
+                    <SingleComment
+                      key={reply.id}
+                      comment={reply}
+                      postId={postId}
+                      postType={postType}
+                      depth={depth + 1}
+                      currentUsername={currentUsername}
+                      currentRole={currentRole}
+                      onDeleted={(id) => setReplies((prev) => prev.filter((r) => r.id !== id))}
+                      onUpdated={(updated) => setReplies((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))}
+                      onReplyAdded={onReplyAdded}
+                    />
+                  ))}
+                </motion.div>
+
+                {hasMoreReplies && (
+                  <button
+                    onClick={() => loadReplies(repliesCursor)}
+                    disabled={loadingReplies}
+                    className="flex items-center gap-2 text-[11px] font-bold text-primary/80 hover:text-primary transition-all ml-8 py-1 hover:translate-x-1"
+                  >
+                    {loadingReplies ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <ChevronDown size={12} />
+                    )}
+                    View older replies
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
-
-      {/* Reply input */}
-      {showReplyBox && (
-        <div className="ml-9 mt-1.5">
-          <CommentInput
-            placeholder={`Reply to ${authorName}…`}
-            onSubmit={handleReply}
-            onCancel={() => setShowReplyBox(false)}
-            submitLabel="Reply"
-            autoFocus
-          />
-        </div>
-      )}
-
-      {/* Nested replies */}
-      {repliesOpen && (
-        <div className="mt-1.5 space-y-3">
-          {loadingReplies && replies.length === 0 && (
-            <div className="flex items-center gap-2 ml-9 text-xs opacity-50">
-              <Loader2 size={12} className="animate-spin" /> Loading replies…
-            </div>
-          )}
-          {replies.map((reply) => (
-            <SingleComment
-              key={reply.id}
-              comment={reply}
-              postId={postId}
-              postType={postType}
-              depth={depth + 1}
-              currentUsername={currentUsername}
-              currentRole={currentRole}
-              onDeleted={(id) =>
-                setReplies((prev) => prev.filter((r) => r.id !== id))
-              }
-              onUpdated={(updated) =>
-                setReplies((prev) =>
-                  prev.map((r) => (r.id === updated.id ? updated : r))
-                )
-              }
-              onReplyAdded={onReplyAdded}
-            />
-          ))}
-          {hasMoreReplies && (
-            <button
-              onClick={() => loadReplies(repliesCursor)}
-              disabled={loadingReplies}
-              className="ml-9 flex items-center gap-1 text-xs opacity-60 hover:opacity-100"
-            >
-              {loadingReplies ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <ChevronDown size={12} />
-              )}
-              Load more replies
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+    </motion.div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CommentSection — main exported component
+// CommentSection — main export
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function CommentSection({
   postId,
@@ -476,13 +639,13 @@ export default function CommentSection({
   currentRole,
   defaultOpen = false,
 }: CommentSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
   const [comments, setComments] = useState<CommentDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<number | undefined>();
   const [count, setCount] = useState(initialCount);
   const [fetchedOnce, setFetchedOnce] = useState(false);
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   const fetchComments = useCallback(
     async (beforeId?: number) => {
@@ -494,15 +657,39 @@ export default function CommentSection({
           postType === "post"
             ? `/api/comments/post/${postId}/top-level?${params}`
             : `/api/comments/social-posts/${postId}/top-level?${params}`;
-        const res = await apiFetch(endpoint);
-        const page: PaginatedResponse<CommentDto> = res?.data ?? res;
-        const fetched: CommentDto[] = page?.content ?? [];
+
+        const json = await apiFetch(endpoint);
+        
+        // ── Robust Data Mapping ───────────────────────────────────────────────
+        /** 
+         * Logic:
+         * 1. If wrapped in ApiResponse: { success, data: { data: [...], hasMore: true } }
+         * 2. If direct PaginatedResponse: { data: [...], hasMore: true } 
+         */
+        const isWrapped = json?.success !== undefined && json?.data !== undefined;
+        const container = isWrapped ? json.data : json;
+
+        
+        let fetched: CommentDto[] = [];
+        if (Array.isArray(container)) {
+          fetched = container;
+        } else if (container && typeof container === "object") {
+          fetched = container.data ?? container.content ?? [];
+        }
+        
+
+
+        const paginationInfo = (container && typeof container === "object" && "hasMore" in container)
+          ? container
+          : (json?.data ?? json);
+        
         setComments((prev) => (beforeId ? [...prev, ...fetched] : fetched));
-        setHasMore(page?.hasMore ?? false);
-        setCursor(page?.nextCursor);
+        setHasMore(paginationInfo?.hasMore ?? false);
+        setCursor(paginationInfo?.nextCursor);
         setFetchedOnce(true);
-      } catch {
-        // silently ignore
+      } catch (e) {
+
+        setFetchedOnce(true); // Prevent UI from getting stuck if it fails
       } finally {
         setLoading(false);
       }
@@ -510,23 +697,33 @@ export default function CommentSection({
     [postId, postType]
   );
 
+
+
   useEffect(() => {
-    if (open && !fetchedOnce) fetchComments();
-  }, [open, fetchedOnce, fetchComments]);
+    if (!fetchedOnce) fetchComments();
+  }, [fetchedOnce, fetchComments]);
+
+  useEffect(() => {
+    if (defaultOpen && sectionRef.current) {
+      setTimeout(() => {
+        sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 250);
+    }
+  }, [defaultOpen]);
 
   async function handleNewComment(text: string) {
     const endpoint =
       postType === "post"
         ? `/api/comments/post/${postId}`
         : `/api/comments/social-posts/${postId}`;
-    // Backend CommentCreateDto uses `text` only — controller resolves post from URL path
     const res = await apiPost(endpoint, { text });
     const created: CommentDto = res?.data ?? res;
     setComments((prev) => [created, ...prev]);
     setCount((n) => n + 1);
+    setFetchedOnce(true);
   }
 
-  function handleReplyAdded(_parentId: number, _reply: CommentDto) {
+  function handleReplyAdded() {
     setCount((n) => n + 1);
   }
 
@@ -536,87 +733,127 @@ export default function CommentSection({
   }
 
   function handleUpdated(updated: CommentDto) {
-    setComments((prev) =>
-      prev.map((c) => (c.id === updated.id ? updated : c))
-    );
+    setComments((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   }
 
+  const isLoggedIn = !!(localStorage.getItem("authToken") || localStorage.getItem("token"));
+
   return (
-    <div className="mt-2">
-      {/* Toggle bar */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs opacity-70 hover:opacity-100 hover:bg-base-300/40 transition-colors"
-      >
-        <MessageSquare size={14} />
-        <span className="font-medium">
-          {count > 0
-            ? `${count} comment${count !== 1 ? "s" : ""}`
-            : "Comments"}
-        </span>
-        {open ? (
-          <ChevronUp size={13} className="ml-auto" />
-        ) : (
-          <ChevronDown size={13} className="ml-auto" />
-        )}
-      </button>
+    <motion.div
+      ref={sectionRef}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+      className="mt-2"
+    >
+      <div className="border-t border-base-content/5 pt-6 mb-5" />
 
-      {/* Body */}
-      {open && (
-        <div className="mt-2 space-y-4 rounded-xl border border-base-300 bg-base-100 p-3">
-          {/* New comment input */}
+      {/* Composer Area */}
+      <div className="px-1 mb-7">
+        {isLoggedIn ? (
           <CommentInput
-            placeholder="Write a comment… (Ctrl+Enter to post)"
+            placeholder="Share your thoughts… (Ctrl+Enter to send)"
             onSubmit={handleNewComment}
+            avatarSeed={currentUsername}
           />
-
-          {loading && comments.length === 0 && (
-            <div className="flex items-center justify-center gap-2 py-6 text-sm opacity-50">
-              <Loader2 size={16} className="animate-spin" /> Loading comments…
+        ) : (
+          <div className="flex items-center gap-4 rounded-2xl border border-dashed border-base-content/20 bg-base-200/30 px-5 py-4 transition-all hover:bg-base-200/50">
+            <div className="bg-base-100 p-2 rounded-full shadow-sm text-primary/60">
+              <MessageSquare size={18} />
             </div>
-          )}
-
-          {!loading && fetchedOnce && comments.length === 0 && (
-            <p className="py-4 text-center text-sm opacity-40">
-              No comments yet. Be the first!
-            </p>
-          )}
-
-          {comments.length > 0 && (
-            <div className="space-y-4">
-              {comments.map((c) => (
-                <SingleComment
-                  key={c.id}
-                  comment={c}
-                  postId={postId}
-                  postType={postType}
-                  depth={0}
-                  currentUsername={currentUsername}
-                  currentRole={currentRole}
-                  onDeleted={handleDeleted}
-                  onUpdated={handleUpdated}
-                  onReplyAdded={handleReplyAdded}
-                />
-              ))}
+            <div className="flex flex-col">
+              <p className="text-sm font-bold text-base-content/70">Join the discussion</p>
+              <p className="text-xs text-base-content/40">Please sign in to leave a comment.</p>
             </div>
-          )}
+          </div>
+        )}
+      </div>
 
-          {hasMore && (
+      {/* Comments List */}
+      <div className="space-y-6">
+        {loading && comments.length === 0 && (
+          <div className="space-y-6 px-1">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-start gap-4 animate-pulse">
+                <div className="w-9 h-9 rounded-full bg-base-200 shrink-0" />
+                <div className="flex-1 space-y-3 pt-1">
+                  <div className="h-2.5 w-24 rounded-full bg-base-200" />
+                  <div className="h-10 w-full rounded-2xl bg-base-200/60" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loading && fetchedOnce && comments.length === 0 && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center gap-4 py-16 px-4"
+          >
+            <div className="relative">
+              <div className="absolute inset-0 bg-primary/5 blur-2xl rounded-full" />
+              <SmilePlus size={42} className="relative text-base-content/20" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-base font-bold text-base-content/50">Voices are echoing…</p>
+              <p className="text-xs text-base-content/30 max-w-[200px]">Be the first one to start the conversation and share your perspective.</p>
+            </div>
+          </motion.div>
+        )}
+
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="space-y-6"
+        >
+          <AnimatePresence mode="popLayout" initial={false}>
+            {comments.map((c) => (
+              <SingleComment
+                key={c.id}
+                comment={c}
+                postId={postId}
+                postType={postType}
+                depth={0}
+                currentUsername={currentUsername}
+                currentRole={currentRole}
+                onDeleted={handleDeleted}
+                onUpdated={handleUpdated}
+                onReplyAdded={handleReplyAdded}
+              />
+            ))}
+          </AnimatePresence>
+        </motion.div>
+
+        {hasMore && (
+          <div className="pt-2 px-1">
             <button
               onClick={() => fetchComments(cursor)}
               disabled={loading}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-base-300 py-2 text-xs opacity-60 hover:opacity-100 transition-opacity"
+              className="group flex w-full items-center justify-center gap-2.5 rounded-2xl border border-base-content/10 bg-base-200/40 py-3.5 text-[11px] font-bold text-base-content/50 transition-all hover:bg-base-200/80 hover:text-primary hover:border-primary/20 shadow-sm active:scale-[0.99] disabled:opacity-40"
             >
               {loading ? (
-                <Loader2 size={13} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin" />
               ) : (
-                <ChevronDown size={13} />
+                <ChevronDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
               )}
-              Load more comments
+              {loading ? "Discovering more insights…" : `View ${count - comments.length} more comments`}
             </button>
-          )}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+
+        {count > 0 && !hasMore && (
+          <div className="flex items-center justify-center gap-4 pt-4 pb-2">
+            <div className="h-px flex-1 bg-base-content/5" />
+            <p className="text-[10px] font-bold text-base-content/20 uppercase tracking-[0.2em]">
+              {count} {count === 1 ? "Comment" : "Comments"}
+            </p>
+            <div className="h-px flex-1 bg-base-content/5" />
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 }

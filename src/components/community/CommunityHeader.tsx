@@ -1,4 +1,4 @@
-import { Users, Settings } from "lucide-react";
+import { Users, Settings, Crown } from "lucide-react";
 
 type CommunityHeaderProps = {
   community: {
@@ -49,14 +49,16 @@ const CommunityHeader = ({
 
         {/* Action Button */}
         <div className="flex justify-end pt-3 h-10">
-          {!finalOwner ? (
+          {finalOwner ? (
+             <div className="flex items-center gap-2">
+               <span className="badge badge-warning gap-1.5 font-bold py-3"><Settings size={14} className="hidden sm:block" /><Crown size={14} /> Owner</span>
+             </div>
+          ) : (
              <button
                className={`btn btn-sm ${finalMember ? "btn-ghost btn-outline" : finalPending ? "btn-warning btn-outline" : isSecret ? "btn-disabled" : "bg-blue-700 text-white border-none hover:bg-blue-800"}`}
                onClick={onJoinClick} disabled={acting || isSecret}>
-               {acting ? <span className="loading loading-spinner loading-xs" /> : finalMember ? "✓ Joined" : finalPending ? "⏳ Pending" : isSecret ? "Invite Only" : c.privacy === "PRIVATE" ? "Request to Join" : "Join"}
+               {acting ? <span className="loading loading-spinner loading-xs" /> : finalMember ? "✓ Joined" : finalPending ? "⏳ Pending" : isSecret ? "Invite Only" : c.privacy === "PRIVATE" ? "Request to Join" : "Join Community"}
              </button>
-          ) : (
-             <span className="badge badge-warning gap-1 font-semibold badge-md"><Settings size={14} /> Owner</span>
           )}
         </div>
 

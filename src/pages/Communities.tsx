@@ -8,16 +8,23 @@ import {
   Globe, Lock, EyeOff, Users, Mail, ClipboardCheck,
   CheckCircle2, AlertTriangle, Inbox, Settings, BarChart3,
   X, Crown, Shield, User, VolumeX, Volume2, Ban, Trash2,
-  Save, Archive, Heart, MessageSquare, Calendar,
+  Save, Archive, MessageSquare, Calendar,
   Tag, Rocket, PartyPopper, Plus, ChevronLeft,
   XCircle, Home, Link, Eye, Image as ImageIcon, RefreshCw,
-  Search as SearchIcon, Activity, Radio, FileText, Sparkles
+  Activity, Radio, FileText
 } from "lucide-react";
+
 import CommunityCard from "../components/community/CommunityCard";
 import CommunityHeader from "../components/community/CommunityHeader";
 import CommunityTabs from "../components/community/CommunityTabs";
 import CommunitySidebar from "../components/community/CommunitySidebar";
 import CreatePost from "../components/ui/CreatePost";
+import PostCard from "../components/post/PostCard";
+import PostSkeleton from "../components/post/PostSkeleton";
+import type { CurrentUser as CardUser, CommunityPost } from "../components/post/PostCard";
+import { jwtDecode } from "jwt-decode";
+
+
 /* ════════════════════════════════════════════════════════════════════════════
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════════ */
@@ -95,12 +102,21 @@ const removePendingLocal = (id: number | string) => {
 interface Post {
   id: number;
   content: string;
-  authorName?: string;
+  authorUsername?: string;
+  authorId?: number;
+  authorProfileImage?: string;
+  authorRole?: string;
   likeCount: number;
   commentCount: number;
+  shareCount?: number;
+  mediaUrls?: string[];
+  imageUrl?: string;
   timeAgo?: string;
   createdAt?: string;
+  isLikedByMe?: boolean;
 }
+
+
 
 interface JoinRequest {
   id: number;
@@ -1665,6 +1681,21 @@ function DetailPanel({
   const [postSort, setPostSort] = useState<"NEW" | "TOP">("NEW");
   const [cursorScore, setCursorScore] = useState<number | null>(null);
 
+  // ── JWT Decode for CurrentUser ──
+  const currentUser: CardUser | null = (() => {
+    const t = getToken();
+    if (!t) return null;
+    try {
+      const d: any = jwtDecode(t);
+      return {
+        id: d.id,
+        role: d.role,
+        username: d.sub || d.username || "User",
+      };
+    } catch { return null; }
+  })();
+
+
   useEffect(() => { setC(normalise(community)); }, [community]);
 
   useEffect(() => {
@@ -1680,17 +1711,19 @@ function DetailPanel({
           const backendPending = detail.hasPendingRequest === true || detail.pendingRequest === true || detail.hasPendingRequest === "true" || detail.pendingRequest === "true";
           const communityId = detail.id ?? community.id;
           const localPending = getPendingLocal().includes(String(communityId));
+          const local = myCommunities.find(x => x.id === communityId);
+          const finalIsOwner = detail.isOwner === true || detail.owner === true || detail.isOwner === "true" || detail.owner === "true" || !!local?.isOwner;
 
-          if (fetchedMember) removePendingLocal(communityId);
+          if (fetchedMember || finalIsOwner) removePendingLocal(communityId);
           else if (backendPending) addPendingLocal(communityId);
 
           setC(prev => normalise({
             ...prev,
             ...detail,
             id: communityId,
-            isMember: fetchedMember,
-            isOwner: detail.isOwner === true || detail.owner === true || detail.isOwner === "true" || detail.owner === "true",
-            hasPendingRequest: fetchedMember ? false : (backendPending || prev.hasPendingRequest === true || localPending)
+            isMember: fetchedMember || finalIsOwner,
+            isOwner: finalIsOwner,
+            hasPendingRequest: (fetchedMember || finalIsOwner) ? false : (backendPending || prev.hasPendingRequest === true || localPending)
           }));
         }
       } catch { }
@@ -1781,7 +1814,9 @@ function DetailPanel({
               onClick={toggleMembership} disabled={acting || isSecret}>
               {acting ? <Spin xs /> : c.isMember ? "Leave" : c.hasPendingRequest ? "⏳ Pending · Cancel" : isSecret ? "Invite Only" : c.privacy === "PRIVATE" ? "Request to Join" : "Join Community"}
             </button>
-            : <span className="badge badge-outline badge-sm flex items-center gap-1"><Settings size={12} /> Owner</span>
+            : <div className="flex items-center gap-2">
+                <span className="badge badge-warning gap-1.5 font-bold py-3"><Crown size={14} /> Owner</span>
+              </div>
           }
         </div>
 
@@ -1839,31 +1874,56 @@ function DetailPanel({
                       </div>
                     </div>
 
-                    {loading && posts.length === 0 && <div className="flex justify-center py-10"><Spin /></div>}
+                    {loading && posts.length === 0 && (
+                      <div className="space-y-4 pt-2">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <PostSkeleton key={`sk-comm-${i}`} />
+                        ))}
+                      </div>
+                    )}
                     {!loading && posts.length === 0 && (
                       <div className="text-center py-12 opacity-50 space-y-2">
                         <div className="flex justify-center mb-2"><Inbox size={40} /></div>
                         <p className="text-sm">{canPost ? "No posts yet — be the first!" : "No posts yet."}</p>
                       </div>
                     )}
-                    {posts.map(post => (
-                      <div key={post.id} className="rounded-xl border border-base-300 bg-base-200 p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-full overflow-hidden border border-base-300 bg-base-200 shrink-0">
-                            <img src={`https://robohash.org/${encodeURIComponent(post.authorName || "Unknown")}`} alt="Avatar" className="w-full h-full object-cover" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold">{post.authorName || "Unknown"}</p>
-                            {(post.timeAgo || post.createdAt) && <p className="text-xs opacity-40">{post.timeAgo || post.createdAt}</p>}
-                          </div>
-                        </div>
-                        <p className="text-sm leading-relaxed opacity-80 whitespace-pre-line">{post.content}</p>
-                        <div className="flex gap-4 mt-2 text-xs opacity-40">
-                          <span className="flex items-center gap-1"><Heart size={12} /> {post.likeCount || 0}</span>
-                          <span className="flex items-center gap-1"><MessageSquare size={12} /> {post.commentCount || 0}</span>
-                        </div>
-                      </div>
-                    ))}
+                    {posts.map(post => {
+                      const cardPost: CommunityPost = {
+                        id: post.id,
+                        variant: "community",
+                        content: post.content,
+                        username: post.authorUsername || "User",
+                        userDisplayName: post.authorUsername,
+                        userProfileImage: post.authorProfileImage,
+                        authorRole: post.authorRole,
+                        likeCount: post.likeCount || 0,
+                        commentCount: post.commentCount || 0,
+                        shareCount: post.shareCount || 0,
+                        isLikedByCurrentUser: post.isLikedByMe,
+                        communityId: c.id,
+                        communityName: c.name,
+                        communityAvatar: c.avatarUrl || undefined,
+                        communityMemberCount: String(c.memberCount || 0),
+                        isMember: c.isMember,
+
+
+                        timeAgo: post.timeAgo || (post.createdAt ? relTime(post.createdAt) : ""),
+                        mediaUrls: post.mediaUrls || (post.imageUrl ? [post.imageUrl] : []),
+                      };
+
+
+                      return (
+                        <PostCard
+                          key={post.id}
+                          post={cardPost}
+                          currentUser={currentUser || undefined}
+                          hideCommunityStrip={true}
+                        />
+
+
+                      );
+                    })}
+
                     {hasMore && !loading && (
                       <button className="w-full py-2 text-sm text-blue-700 hover:opacity-70" onClick={() => loadPosts(cursor, cursorScore, false)}>Load more ↓</button>
                     )}
@@ -2187,13 +2247,17 @@ const Community = () => {
           )}
           {!searchLoading && searchResults.length > 0 && (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-              {searchResults.map((c: any) => (
-                <CommunityCard key={c.id} id={c.id} slug={c.slug} name={c.name} description={c.description}
-                  members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} onClick={() => {
-                    const local = myCommunities.find(x => x.id === c.id);
-                    setSelected(local ? { ...c, isMember: local.isMember, isOwner: local.isOwner, hasPendingRequest: local.hasPendingRequest } : c);
-                  }} />
-              ))}
+              {searchResults.map((c: any) => {
+                const local = myCommunities.find(x => x.id === c.id);
+                return (
+                  <CommunityCard key={c.id} id={c.id} slug={c.slug} name={c.name} description={c.description}
+                    members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} 
+                    isMember={!!local?.isMember} isOwner={!!local?.isOwner} hasPendingRequest={!!local?.hasPendingRequest}
+                    onClick={() => {
+                      setSelected(local ? { ...c, isMember: local.isMember, isOwner: local.isOwner, hasPendingRequest: local.hasPendingRequest } : c);
+                    }} />
+                );
+              })}
             </div>
           )}
           {searchHasMore && !searchLoading && (

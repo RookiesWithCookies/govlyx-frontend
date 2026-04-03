@@ -6,13 +6,15 @@ import {
   User,
   Settings,
   LayoutDashboard,
+  Bell,
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import { isDepartmentUser } from "../../utils/auth";
+import { useCurrentUser } from "../../hooks/useUser";
+import { useUnreadNotificationsCount } from "../../hooks/useNotification";
 
 const BASE_NAV_ITEMS = [
   { label: "Home", icon: Home, to: "/" },
   { label: "Communities", icon: Users, to: "/communities" },
+  { label: "Notifications", icon: Bell, to: "/notifications" },
   { label: "Quick Chat", icon: Dices, to: "/quick-chat" },
   { label: "Profile", icon: User, to: "/profile" },
   { label: "Settings", icon: Settings, to: "/settings" },
@@ -21,48 +23,15 @@ const BASE_NAV_ITEMS = [
 const DEPT_NAV_ITEM = { label: "Dept. Dashboard", icon: LayoutDashboard, to: "/department/dashboard" };
 
 // ---------------------------------------------------------------------------
-// Hook: fetch the currently authenticated user from GET /api/users/me
-//
-// IMPORTANT: User.getUsername() in Spring Security returns the EMAIL.
-// The display username lives in getActualUsername() → serialized as "actualUsername".
-// ---------------------------------------------------------------------------
-function useCurrentUser() {
-  const [username, setUsername] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem("token"); // adjust key if your app uses a different one
-
-    fetch("/api/users/me", {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch user");
-        return res.json();
-      })
-      .then((body) => {
-        // ApiResponse<User> shape: { data: { actualUsername: "...", ... } }
-        // "actualUsername" comes from User.getActualUsername() (the real display name)
-        // "username" from User.getUsername() returns EMAIL — don't use that here
-        const user = body?.data;
-        setUsername(user?.actualUsername ?? user?.username ?? null);
-      })
-      .catch(() => setUsername(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { username, loading };
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 const SidebarLeft = () => {
-  const { username, loading } = useCurrentUser();
-  const isDept = isDepartmentUser();
+  const { data: user, isLoading: loading } = useCurrentUser();
+  const { data: unreadCount } = useUnreadNotificationsCount();
+  
+  // Simple check for role since useCurrentUser returns the full profile
+  const isDept = user?.role === "ROLE_DEPARTMENT";
+  const username = user?.actualUsername ?? user?.username;
 
   const navItems = isDept
     ? [...BASE_NAV_ITEMS.slice(0, 3), DEPT_NAV_ITEM, ...BASE_NAV_ITEMS.slice(3)]
@@ -90,22 +59,31 @@ const SidebarLeft = () => {
 
       {/* Navigation */}
       <nav className="rounded-xl bg-base-200 p-2">
-        {navItems.map(({ label, icon: Icon, to }) => (
-          <NavLink
-            key={label}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition
-               ${isActive
-                ? "bg-[#1D4ED8] text-white"
-                : "hover:bg-base-300"
-              }`
-            }
-          >
-            <Icon size={18} />
-            {label}
-          </NavLink>
-        ))}
+        {navItems.map(({ label, icon: Icon, to }) => {
+          const isNotifications = label === "Notifications";
+
+          return (
+            <NavLink
+              key={label}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition relative
+                ${isActive
+                  ? "bg-[#1D4ED8] text-white"
+                  : "hover:bg-base-300"
+                }`
+              }
+            >
+              <Icon size={18} />
+              <span className="flex-1">{label}</span>
+              {isNotifications && unreadCount !== undefined && unreadCount > 0 && (
+                <span className="bg-error text-error-content text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* Communities Placeholder */}

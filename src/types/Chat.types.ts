@@ -9,15 +9,22 @@ export interface ApiResponse<T> {
 
 // ── Message ──────────────────────────────────────────────────────────────────
 
-export type MessageType = "TEXT" | "SYSTEM" | "USER_LEFT";
+export type MessageType = "TEXT" | "SYSTEM" | "USER_JOINED" | "USER_LEFT" | "CHAT_ENDED" | "IMAGE" | "VIDEO" | "STICKER";
 
 export interface ChatMessageDto {
   messageId:   string;
   senderId:    string;   // anonymous id, or "SYSTEM"
-  content:     string;
+  content?:    string;   // optional for media messages
   messageType: MessageType;
   timestamp:   string;   // ISO-8601
   replyToId?:  string;   // optional: messageId of the message being replied to
+  
+  // Media fields
+  mediaPayload?: string; // base64 data-URI
+  mimeType?:     string; // image/jpeg, etc.
+  mediaName?:    string; // sunset.jpg, etc.
+  viewTimer?:    number; // 0 = no timer, >0 = seconds
+  viewOnce?:     boolean;
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────

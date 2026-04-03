@@ -10,11 +10,12 @@ export type CommunityCardProps = {
   avatarUrl?: string | null;
   privacy?: string;
   isMember?: boolean;
+  isOwner?: boolean;
   hasPendingRequest?: boolean;
   onClick?: () => void;
 };
 
-const CommunityCard = ({ id, slug, name, description, members, avatarUrl, privacy, isMember, hasPendingRequest, onClick }: CommunityCardProps) => {
+const CommunityCard = ({ id, slug, name, description, members, avatarUrl, privacy, isMember, isOwner, hasPendingRequest, onClick }: CommunityCardProps) => {
   const navigate = useNavigate();
 
   const handlePress = () => {
@@ -61,16 +62,19 @@ const CommunityCard = ({ id, slug, name, description, members, avatarUrl, privac
                 }
               </span>
             )}
-            {isMember && (
+            {isOwner ? (
+              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
+                Owner
+              </span>
+            ) : isMember ? (
               <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-success/15 text-success border border-success/20">
                 Joined
               </span>
-            )}
-            {hasPendingRequest && (
+            ) : hasPendingRequest ? (
               <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/20">
                 Requested
               </span>
-            )}
+            ) : null}
           </div>
 
           {description ? (

@@ -13,7 +13,7 @@ import {
 import { MdLocationOn } from "react-icons/md";
 import { RiAttachment2 } from "react-icons/ri";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useRef, type JSX } from "react";
+import { useState, useRef, useEffect, type JSX } from "react";
 
 // ─── API CONFIG ───────────────────────────────────────────────────────────────
 
@@ -135,10 +135,10 @@ async function apiCreatePoll(payload: {
   question: string;
   options: string[];
   expiresIn: string;
-  allowMultipleVotes: boolean;
-  showResultsBeforeExpiry?: boolean;
+  allowMultipleVotes: boolean;       // ← matches CreatePollRequest.allowMultipleVotes
+  showResultsBeforeExpiry?: boolean; // ← optional; backend defaults to true
 }): Promise<ApiResult> {
-  const res = await fetch(`/api/polls/create`, {
+  const res = await fetch(`/api/polls/create`, {   // ← /create not root
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),
@@ -263,6 +263,14 @@ function PostForm({
   const [submitted, setSubmitted]           = useState(false);
   const [error, setError]                   = useState<{ type: "error" | "network"; msg: string } | null>(null);
 
+  // ── Suggestions ──
+  const [mentionSearch, setMentionSearch]   = useState(false);
+  const [mentionQuery, setMentionQuery]     = useState("");
+  const [suggestions, setSuggestions]       = useState<any[]>([]);
+  const [selectedIndex, setSelectedIndex]   = useState(0);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const textareaRef                         = useRef<HTMLTextAreaElement>(null);
+
   // ── Validation ──
   const validate = () => {
     if (!content.trim()) { setError({ type: "error", msg: "Please write something before posting." }); return false; }
@@ -319,6 +327,81 @@ function PostForm({
       setLoading(false);
     }
   };
+
+  // ── Mentions ──
+  const handleContentChange = (val: string) => {
+    setContent(val);
+    setError(null);
+
+    const cursor = textareaRef.current?.selectionStart ?? 0;
+    const textBefore = val.slice(0, cursor);
+    const lastAtPos = textBefore.lastIndexOf("@");
+
+    if (lastAtPos !== -1) {
+      const queryText = textBefore.slice(lastAtPos + 1);
+      // Ensure no spaces between @ and cursor
+      if (!queryText.includes(" ")) {
+        setMentionSearch(true);
+        setMentionQuery(queryText);
+        setSelectedIndex(0);
+        return;
+      }
+    }
+    setMentionSearch(false);
+  };
+
+  const insertMention = (user: any) => {
+    const cursor = textareaRef.current?.selectionStart ?? 0;
+    const textBefore = content.slice(0, cursor);
+    const textAfter = content.slice(cursor);
+    const lastAtPos = textBefore.lastIndexOf("@");
+
+    const newContent = textBefore.slice(0, lastAtPos) + "@" + user.username + " " + textAfter;
+    setContent(newContent);
+    setMentionSearch(false);
+    textareaRef.current?.focus();
+  };
+
+  const fetchSuggestions = async (q: string) => {
+    if (q.length < 2) { setSuggestions([]); return; }
+    console.log("[Mentions] Fetching for:", q, "isReporting:", isReportingIssue);
+    setMentionLoading(true);
+    try {
+      const res = await fetch(`/api/user-tagging/suggestions?query=${encodeURIComponent(q)}&limit=5`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        console.error("[Mentions] API Error:", res.status);
+        throw new Error();
+      }
+      const json = await res.json();
+      console.log("[Mentions] Raw Response:", json);
+      const list = json.data?.data ?? json.data ?? [];
+      
+      let raw = Array.isArray(list) ? list : [];
+      // Conditional filtering
+      if (isReportingIssue) {
+        raw = raw.filter((u: any) => u.role === "ROLE_DEPARTMENT");
+      }
+      console.log("[Mentions] Final Suggestions:", raw);
+      setSuggestions(raw);
+    } catch (err) {
+      console.error("[Mentions] Fetch failed:", err);
+      setSuggestions([]);
+    } finally {
+      setMentionLoading(false);
+    }
+  };
+
+  // Debounced fetch
+  const timerRef = useRef<any>(null);
+  useEffect(() => {
+    if (mentionSearch) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => fetchSuggestions(mentionQuery), 200);
+    }
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [mentionSearch, mentionQuery]);
 
   if (submitted) {
     return (
@@ -405,8 +488,9 @@ function PostForm({
         )}
       </AnimatePresence>
 
-      <div>
+      <div className="relative">
         <textarea
+          ref={textareaRef}
           placeholder={
             isReportingIssue
               ? "Describe the issue..."
@@ -416,8 +500,72 @@ function PostForm({
             isReportingIssue ? "border-orange-500/40 focus:border-orange-500" : "focus:border-blue-700"
           }`}
           value={content}
-          onChange={(e) => { setContent(e.target.value); setError(null); }}
+          onChange={(e) => handleContentChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (mentionSearch && suggestions.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev + 1) % suggestions.length);
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+              } else if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                insertMention(suggestions[selectedIndex]);
+              } else if (e.key === "Escape") {
+                setMentionSearch(false);
+              }
+            }
+          }}
         />
+
+        {/* Suggestion Dropdown */}
+        <AnimatePresence>
+          {mentionSearch && (suggestions.length > 0 || mentionLoading || mentionQuery.length < 2) && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="absolute z-50 bottom-full left-0 w-full mb-2 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-2 border-b border-base-300 bg-base-200/50 flex justify-between items-center">
+                <span className="text-[10px] font-bold uppercase opacity-40">
+                  {isReportingIssue ? "Suggested Departments" : "Mention People"}
+                </span>
+                {mentionLoading && <Loader2 size={10} className="animate-spin opacity-40" />}
+              </div>
+              <div className="max-h-[200px] overflow-y-auto">
+                {mentionQuery.length < 2 ? (
+                  <div className="px-4 py-3 text-xs text-base-content/40 italic">
+                    Type at least 2 characters to search...
+                  </div>
+                ) : !mentionLoading && suggestions.length === 0 ? (
+                  <div className="px-4 py-3 text-xs text-base-content/40 italic">
+                    No results found for "@{mentionQuery}"
+                  </div>
+                ) : (
+                  suggestions.map((u, i) => (
+                    <div
+                      key={u.id}
+                      onClick={() => insertMention(u)}
+                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                        i === selectedIndex ? "bg-blue-600/10 text-blue-500" : "hover:bg-base-200"
+                      }`}
+                    >
+                      <img 
+                        src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(u.username)}`}
+                        className="w-7 h-7 rounded-full bg-base-300 border border-base-300"
+                        alt="" 
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">{u.displayName}</p>
+                        <p className="text-[10px] opacity-40 truncate">@{u.username} • {u.role?.replace("ROLE_", "").toLowerCase()}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div>
@@ -457,6 +605,16 @@ function PollForm() {
   const [errors, setErrors]             = useState<Record<string, string | boolean>>({});
   const [loading, setLoading]           = useState(false);
   const [submitted, setSubmitted]       = useState(false);
+  const [allowMultipleVotes, setAllowMultipleVotes] = useState(false);
+  const [expiresIn, setExpiresIn] = useState("1d");
+
+  // ── Suggestions ──
+  const [mentionSearch, setMentionSearch]   = useState(false);
+  const [mentionQuery, setMentionQuery]     = useState("");
+  const [suggestions, setSuggestions]       = useState<any[]>([]);
+  const [selectedIndex, setSelectedIndex]   = useState(0);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const textareaRef                         = useRef<HTMLTextAreaElement>(null);
 
   const updateOption = (i: number, val: string) => { const u = [...options]; u[i] = val; setOptions(u); };
   const addOption    = () => { if (options.length < 4) setOptions([...options, ""]); };
@@ -477,9 +635,8 @@ function PollForm() {
       const result = await apiCreatePoll({
         question: pollQuestion.trim(),
         options: options.filter((o) => o.trim()),
-        expiresIn: "1d",
-        allowMultipleVotes: false,
-        showResultsBeforeExpiry: true,
+        expiresIn,
+        allowMultipleVotes,
       });
       if (!result.ok) return;
       setSubmitted(true);
@@ -489,6 +646,68 @@ function PollForm() {
       setLoading(false);
     }
   };
+
+  const handleQuestionChange = (val: string) => {
+    setPollQuestion(val);
+    const cursor = textareaRef.current?.selectionStart ?? 0;
+    const textBefore = val.slice(0, cursor);
+    const lastAtPos = textBefore.lastIndexOf("@");
+    if (lastAtPos !== -1) {
+      const q = textBefore.slice(lastAtPos + 1);
+      if (!q.includes(" ")) {
+        setMentionSearch(true);
+        setMentionQuery(q);
+        setSelectedIndex(0);
+        return;
+      }
+    }
+    setMentionSearch(false);
+  };
+
+  const insertMention = (user: any) => {
+    const cursor = textareaRef.current?.selectionStart ?? 0;
+    const textBefore = pollQuestion.slice(0, cursor);
+    const textAfter = pollQuestion.slice(cursor);
+    const lastAtPos = textBefore.lastIndexOf("@");
+    setPollQuestion(textBefore.slice(0, lastAtPos) + "@" + user.username + " " + textAfter);
+    setMentionSearch(false);
+    textareaRef.current?.focus();
+  };
+
+  const fetchSuggestions = async (q: string) => {
+    if (q.length < 2) { setSuggestions([]); return; }
+    console.log("[Poll Mentions] Fetching for:", q);
+    setMentionLoading(true);
+    try {
+      const res = await fetch(`/api/user-tagging/suggestions?query=${encodeURIComponent(q)}&limit=5`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        console.error("[Poll Mentions] API Error:", res.status);
+        throw new Error();
+      }
+      const json = await res.json();
+      console.log("[Poll Mentions] Response:", json);
+      const list = json.data?.data ?? json.data ?? [];
+      const final = Array.isArray(list) ? list : [];
+      console.log("[Poll Mentions] Final List:", final);
+      setSuggestions(final);
+    } catch (err) {
+      console.error("[Poll Mentions] Fetch failed:", err);
+      setSuggestions([]);
+    } finally {
+      setMentionLoading(false);
+    }
+  };
+
+  const timerRef = useRef<any>(null);
+  useEffect(() => {
+    if (mentionSearch) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => fetchSuggestions(mentionQuery), 200);
+    }
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [mentionSearch, mentionQuery]);
 
   if (submitted) {
     return (
@@ -502,12 +721,63 @@ function PollForm() {
 
   return (
     <div className="flex flex-col gap-3">
-      <textarea
-        className={`textarea textarea-bordered w-full min-h-[80px] focus:border-blue-700 ${errors.pollQuestion ? "border-red-500" : ""}`}
-        placeholder="Ask your poll question..."
-        value={pollQuestion}
-        onChange={(e) => setPollQuestion(e.target.value)}
-      />
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          className={`textarea textarea-bordered w-full min-h-[80px] focus:border-blue-700 ${errors.pollQuestion ? "border-red-500" : ""}`}
+          placeholder="Ask your poll question..."
+          value={pollQuestion}
+          onChange={(e) => handleQuestionChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (mentionSearch && suggestions.length > 0) {
+              if (e.key === "ArrowDown") { e.preventDefault(); setSelectedIndex(p => (p + 1) % suggestions.length); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setSelectedIndex(p => (p - 1 + suggestions.length) % suggestions.length); }
+              else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(suggestions[selectedIndex]); }
+              else if (e.key === "Escape") { setMentionSearch(false); }
+            }
+          }}
+        />
+
+        {/* Suggestion Dropdown */}
+        <AnimatePresence>
+          {mentionSearch && (suggestions.length > 0 || mentionLoading || mentionQuery.length < 2) && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="absolute z-50 bottom-full left-0 w-full mb-2 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-2 border-b border-base-300 bg-base-200/50 flex justify-between items-center text-[10px] font-bold uppercase opacity-40">
+                Mention People
+                {mentionLoading && <Loader2 size={10} className="animate-spin" />}
+              </div>
+              <div className="max-h-[160px] overflow-y-auto">
+                {mentionQuery.length < 2 ? (
+                  <div className="px-4 py-3 text-xs text-base-content/40 italic">
+                    Type at least 2 characters to search...
+                  </div>
+                ) : !mentionLoading && suggestions.length === 0 ? (
+                  <div className="px-4 py-3 text-xs text-base-content/40 italic">
+                    No results found for "@{mentionQuery}"
+                  </div>
+                ) : (
+                  suggestions.map((u, i) => (
+                    <div
+                      key={u.id}
+                      onClick={() => insertMention(u)}
+                      className={`flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors ${i === selectedIndex ? "bg-blue-600/10 text-blue-500" : "hover:bg-base-200"}`}
+                    >
+                      <img src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(u.username)}`} className="w-6 h-6 rounded-full bg-base-300" alt="" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">{u.displayName}</p>
+                        <p className="text-[10px] opacity-40 truncate">@{u.username}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
       {options.map((opt, i) => (
         <div key={i} className="flex items-center gap-2">
           <input
@@ -522,7 +792,35 @@ function PollForm() {
           )}
         </div>
       ))}
-      <button className="btn btn-ghost btn-sm w-full border-dashed" onClick={addOption}>+ Add Option</button>
+
+      <div className="flex items-center justify-between gap-4 mt-1 bg-base-300/30 p-2 rounded-xl border border-base-300/50">
+        <span className="text-xs font-bold text-base-content/50 uppercase tracking-wider ml-1">Poll Duration</span>
+        <select 
+          className="select select-sm select-bordered focus:border-blue-700 font-semibold h-8 min-h-0 bg-base-100"
+          value={expiresIn}
+          onChange={(e) => setExpiresIn(e.target.value)}
+        >
+          <option value="1h">1 Hour</option>
+          <option value="1d">1 Day</option>
+          <option value="3d">3 Days</option>
+          <option value="7d">7 Days</option>
+        </select>
+      </div>
+
+      <button className="btn btn-ghost btn-sm w-full border-dashed mb-2" onClick={addOption}>+ Add Option</button>
+
+      <div className="flex flex-col gap-2 p-1">
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <div 
+            className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${allowMultipleVotes ? "bg-blue-600" : "bg-base-content/20"}`}
+            onClick={() => setAllowMultipleVotes(!allowMultipleVotes)}
+          >
+            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${allowMultipleVotes ? "translate-x-5" : "translate-x-1"}`} />
+          </div>
+          <span className="text-xs font-semibold text-base-content/60 group-hover:text-base-content transition-colors">Allow multiple votes</span>
+        </label>
+      </div>
+
       <div className="flex justify-end pt-1">
         <button className="btn btn-sm bg-blue-700 text-white min-w-[100px]" onClick={handlePost} disabled={loading}>
           {loading ? <Loader2 size={13} className="animate-spin" /> : "Post Poll"}

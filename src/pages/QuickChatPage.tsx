@@ -5,7 +5,7 @@ const QuickChatPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full w-full overflow-hidden">
       <StrangerChat standalone onClose={() => navigate("/")} />
     </div>
   );

@@ -30,11 +30,10 @@ export class ChatAuthError extends Error {
 
 /** Thrown for other HTTP 4xx/5xx errors */
 export class ChatApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
+  public readonly status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
     this.name = "ChatApiError";
   }
 }
@@ -121,3 +120,20 @@ export const getMessages = (
   limit = 50,
 ): Promise<ApiResponse<ChatMessageDto[]>> =>
   get<ChatMessageDto[]>("/api/chat/messages", { limit });
+/**
+ * POST /api/chat/{sessionId}/media
+ * Sends rich media (image, video, sticker) to the session.
+ */
+export const sendMedia = (
+  sessionId: string,
+  media: {
+    type: string;
+    mediaPayload: string;
+    mimeType: string;
+    mediaName?: string;
+    viewTimer?: number;
+    viewOnce?: boolean;
+    replyToId?: string;
+  }
+): Promise<ApiResponse<{ messageId: string }>> =>
+  post<{ messageId: string }>(`/api/chat/${sessionId}/media`, media);

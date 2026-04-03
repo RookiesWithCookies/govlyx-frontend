@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import AuthLayout from "../components/auth/AuthLayout";
 import AuthHeader from "../components/auth/AuthHeader";
 import AuthInput from "../components/auth/AuthInput";
@@ -8,6 +8,9 @@ import { Info } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const isExpired = queryParams.get("error") === "expired";
 
   const [form, setForm] = useState({
     email: "",
@@ -79,6 +82,14 @@ const Login = () => {
           </div>
         </div>
       </div>
+
+      {/* Session Expired Message */}
+      {isExpired && !error && (
+        <div className="mb-4 rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm text-amber-500 flex items-center gap-3">
+          <Info size={16} />
+          <span>Session expired. Please log in again to continue.</span>
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (

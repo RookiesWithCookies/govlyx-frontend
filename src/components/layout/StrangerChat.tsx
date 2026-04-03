@@ -1,35 +1,12 @@
 // src/components/layout/StrangerChat.tsx
-//
-// ONLY CHANGE vs. your original:
-//   • `chat.restoring` check at the top — renders a brief loading spinner
-//     (using your existing DaisyUI classes) while useChat checks localStorage
-//     for a live session on page refresh.  Prevents the IDLE "Start Chatting"
-//     screen from flashing before the restore check finishes.
-//   • All icons, layout, DaisyUI classes, reply logic, Bubble, MessageArea,
-//     IdleScreen, SearchingScreen, ErrorScreen — 100% identical to your file.
-
 import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from "react";
-import { Dices, User, Zap, Search, AlertTriangle } from "lucide-react";
+import { Dices, Zap, Search, AlertTriangle, Plus, Image as ImageIcon, Video, X, Eye, EyeOff, Send, ArrowLeft, Trash2, LogOut } from "lucide-react";
+import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useChat } from "../../hooks/useChat";
-import type { ChatMessageDto, ChatStatus } from "../../types/chat.types";
+import { sendMedia } from "../../api/chatApi.service";
+import type { ChatMessageDto, ChatStatus, MessageType } from "../../types/chat.types";
 
-// ── Inline SVG icons ──────────────────────────────────────────────────────────
-
-const IconSend = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="22" y1="2" x2="11" y2="13" />
-    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-  </svg>
-);
-
-const IconX = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18" />
-    <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
-);
+// ── Icons & Config ──────────────────────────────────────────────────────────
 
 const IconShield = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
@@ -38,70 +15,57 @@ const IconShield = () => (
   </svg>
 );
 
-const IconNext = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="5 4 15 12 5 20 5 4" />
-    <line x1="19" y1="5" x2="19" y2="19" />
-  </svg>
-);
-
-const IconLeave = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
-
 const IconReply = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 17 4 12 9 7" />
     <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
   </svg>
 );
 
-// ── Status config ─────────────────────────────────────────────────────────────
-
 const DOT_CLASS: Record<ChatStatus, string> = {
-  IDLE:         "bg-base-content/30",
+  IDLE:         "bg-base-content/20",
   SEARCHING:    "bg-warning animate-pulse",
-  CONNECTED:    "bg-success",
+  CONNECTED:    "bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]",
   PARTNER_LEFT: "bg-error",
   ERROR:        "bg-error",
 };
 
 const STATUS_LABEL: Record<ChatStatus, string> = {
   IDLE:         "Ready",
-  SEARCHING:    "Searching...",
+  SEARCHING:    "Finding Match",
   CONNECTED:    "Connected",
-  PARTNER_LEFT: "Partner left",
+  PARTNER_LEFT: "Stranger Left",
   ERROR:        "Error",
 };
-
-// ── Reply types ───────────────────────────────────────────────────────────────
 
 interface ReplyTo {
   messageId: string;
   senderId:  string;
-  content:   string;
+  content?:   string;
+  messageType: MessageType;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface Props {
-  onClose?: () => void;
-  standalone?: boolean;
+interface MediaPreview {
+  file: File;
+  url: string;
+  type: "IMAGE" | "VIDEO";
+  viewOnce: boolean;
 }
 
-export default function StrangerChat({ onClose, standalone }: Props) {
-  const chat      = useChat();
-  const [draft, setDraft]     = useState("");
+// ── Main Component ───────────────────────────────────────────────────────────
+
+export default function StrangerChat({ onClose, standalone }: { onClose?: () => void; standalone?: boolean }) {
+  const chat = useChat();
+  const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -112,11 +76,11 @@ export default function StrangerChat({ onClose, standalone }: Props) {
   }, [chat.status]);
 
   useEffect(() => {
-    if (replyTo) inputRef.current?.focus();
-  }, [replyTo]);
-
-  useEffect(() => {
-    if (chat.status !== "CONNECTED") setReplyTo(null);
+    if (chat.status !== "CONNECTED") {
+      setReplyTo(null);
+      setMediaPreview(null);
+      setShowAttachMenu(false);
+    }
   }, [chat.status]);
 
   const handleSend = () => {
@@ -126,14 +90,65 @@ export default function StrangerChat({ onClose, standalone }: Props) {
     setReplyTo(null);
   };
 
+  const handleFileSelect = (type: "IMAGE" | "VIDEO") => {
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = type === "IMAGE" ? "image/*" : "video/*";
+      fileInputRef.current.click();
+    }
+    setShowAttachMenu(false);
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setMediaPreview({
+      file,
+      url,
+      type: file.type.startsWith("video/") ? "VIDEO" : "IMAGE",
+      viewOnce: false
+    });
+    e.target.value = "";
+  };
+
+  const handleSendMedia = async () => {
+    if (!mediaPreview || !chat.session) return;
+    setIsUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+      });
+      reader.readAsDataURL(mediaPreview.file);
+      const base64 = await base64Promise;
+
+      await sendMedia(chat.session.sessionId, {
+        type: mediaPreview.type,
+        mediaPayload: base64,
+        mimeType: mediaPreview.file.type,
+        mediaName: mediaPreview.file.name,
+        viewOnce: mediaPreview.viewOnce,
+        replyToId: replyTo?.messageId
+      });
+      setMediaPreview(null);
+      setReplyTo(null);
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-    if (e.key === "Escape" && replyTo) {
+    if (e.key === "Escape") {
       e.preventDefault();
       setReplyTo(null);
+      setMediaPreview(null);
+      setShowAttachMenu(false);
     }
   };
 
@@ -142,486 +157,436 @@ export default function StrangerChat({ onClose, standalone }: Props) {
     chat.startSearch();
   }, [chat]);
 
-  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget) return;
-    if (chat.status === "CONNECTED") return;
-    if (onClose) onClose();
+  const handleBackdrop = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && chat.status !== "CONNECTED" && onClose) onClose();
   };
 
-  // ── [NEW] Restore spinner ─────────────────────────────────────────────────
-  // Shown for ~1 network round-trip on page load.
-  // Prevents the "Start Chatting" IDLE screen from flashing when the user
-  // refreshes mid-chat and is about to be restored to CONNECTED.
-  if (chat.restoring) {
-    const restoringBody = (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-base-content/40">
-        <span className="loading loading-spinner loading-md" />
-        <p className="text-xs">Restoring your session…</p>
-      </div>
-    );
+  const containerBase = standalone 
+    ? "flex flex-col w-full h-full bg-base-200/50 backdrop-blur-2xl relative overflow-hidden"
+    : "flex flex-col w-full max-w-2xl h-[90vh] md:h-[800px] rounded-3xl overflow-hidden bg-base-200 shadow-2xl backdrop-blur-xl relative border border-base-300";
 
-    const sharedHeader = (withClose: boolean) => (
-      <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-base-200 border-b border-base-300">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-700/10 text-blue-700 select-none">
-          <Dices size={20} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold leading-tight">Quick Chat</p>
-        </div>
-        {withClose && (
-          <button className="btn btn-ghost btn-xs btn-circle ml-1" onClick={onClose} aria-label="Close">
-            <IconX />
-          </button>
-        )}
-      </header>
-    );
+  const renderContent = () => (
+    <div className={containerBase}>
+      {/* ── Background Glows (Subtle and Theme-adaptive) ── */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/5 blur-[120px] pointer-events-none" />
 
-    if (standalone) {
-      return (
-        <div className="flex flex-col w-full h-full bg-base-100 overflow-hidden">
-          {sharedHeader(false)}
-          <div className="flex-1 flex flex-col min-h-0">{restoringBody}</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="relative flex flex-col w-full max-w-md h-[85vh] max-h-[680px] rounded-2xl overflow-hidden bg-base-100 border border-base-300 shadow-2xl">
-          {sharedHeader(true)}
-          <div className="flex-1 flex flex-col min-h-0">{restoringBody}</div>
-        </div>
-      </div>
-    );
-  }
-  // ── end restore spinner ───────────────────────────────────────────────────
-
-  if (standalone) {
-    return (
-      <div className="flex flex-col w-full h-full bg-base-100 overflow-hidden relative">
-        {/* ── Header ── */}
-        <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-base-200 border-b border-base-300">
-          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-700/10 text-blue-700 select-none">
-            <Dices size={20} />
+      {/* ── Header Area (Persistent & Sticky) ── */}
+      <div className="shrink-0 z-20">
+        <header className={`flex items-center justify-between gap-3 px-6 pb-4 bg-base-300/90 backdrop-blur-xl border-b border-base-300 ${standalone ? "pt-12 md:pt-6" : "pt-6"}`}>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary-focus text-primary-content shadow-lg shadow-primary/20">
+              <Dices size={24} />
+            </div>
+            <div className="flex flex-col">
+              <h1 className="text-lg font-bold text-base-content tracking-tight leading-tight">Anonymous Chat</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`w-2 h-2 rounded-full ${DOT_CLASS[chat.status]}`} />
+                <span className="text-[10px] text-base-content/50 uppercase tracking-widest font-black">
+                  {STATUS_LABEL[chat.status]}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold leading-tight">Quick Chat</p>
-            <p className="text-xs text-base-content/50 truncate mt-0.5">
-              {(chat.status === "CONNECTED" || chat.status === "PARTNER_LEFT")
-                ? "You are chatting anonymously"
-                : "Connect with a random stranger"}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className={`w-2 h-2 rounded-full ${DOT_CLASS[chat.status]}`} />
-            <span className="text-xs text-base-content/50 hidden sm:inline">
-              {STATUS_LABEL[chat.status]}
-            </span>
+          <div className="flex items-center gap-2">
+            {onClose && (
+              <button onClick={onClose} className="btn btn-ghost btn-sm btn-square opacity-60 hover:opacity-100">
+                <X size={20} />
+              </button>
+            )}
           </div>
         </header>
 
-        {/* ── Body ── */}
-        <div className="flex-1 flex flex-col min-h-0">
-          {chat.status === "IDLE" && <IdleScreen onStart={chat.startSearch} />}
+        {/* ── Persistent Info Banner ── */}
+        {(chat.status === "CONNECTED" || chat.status === "PARTNER_LEFT") && (
+          <div className="px-6 py-2.5 bg-base-200/50 backdrop-blur-md border-b border-base-content/5 flex items-center justify-center">
+            <div className="flex items-center gap-2 text-base-content/40 font-bold uppercase tracking-[0.2em] text-[9px]">
+              <IconShield />
+              <span>Chatting anonymously with local people</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Body ── */}
+      <main className="flex-1 flex flex-col min-h-0 relative z-10">
+        <AnimatePresence mode="wait">
+          {chat.status === "IDLE" && (
+            <motion.div key="idle" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} className="h-full">
+              <IdleScreen onStart={chat.startSearch} />
+            </motion.div>
+          )}
           {chat.status === "SEARCHING" && (
-            <SearchingScreen queueSize={chat.queueSize} onCancel={chat.cancelSearch} />
+            <motion.div key="searching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
+              <SearchingScreen queueSize={chat.queueSize} onCancel={chat.cancelSearch} />
+            </motion.div>
           )}
           {(chat.status === "CONNECTED" || chat.status === "PARTNER_LEFT") && (
-            <MessageArea
-              messages={chat.messages ?? []}
-              myId={chat.session?.yourAnonymousId ?? ""}
-              partnerTyping={chat.partnerTyping}
-              bottomRef={bottomRef}
-              onReply={setReplyTo}
-            />
+            <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
+              <MessageArea
+                messages={chat.messages ?? []}
+                myId={chat.session?.yourAnonymousId ?? ""}
+                partnerTyping={chat.partnerTyping}
+                bottomRef={bottomRef}
+                onReply={(msg) => setReplyTo({ messageId: msg.messageId, senderId: msg.senderId, content: msg.content, messageType: msg.messageType })}
+              />
+            </motion.div>
           )}
           {chat.status === "ERROR" && (
-            <ErrorScreen error={chat.error} onRetry={chat.startSearch} />
+            <motion.div key="error" className="h-full">
+              <ErrorScreen error={chat.error} onRetry={chat.startSearch} />
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
+      </main>
 
-        {/* ── Footer: CONNECTED ── */}
-        {chat.status === "CONNECTED" && (
-          <footer className="shrink-0 border-t border-base-300 bg-base-200 px-3 pt-3 pb-3">
-            {replyTo && (
-              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-base-300 border-l-2 border-blue-700">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-blue-700 font-semibold leading-none mb-0.5">
-                    {replyTo.senderId === chat.session?.yourAnonymousId ? "You" : "Stranger"}
-                  </p>
-                  <p className="text-xs text-base-content/50 truncate">{replyTo.content}</p>
+      {/* ── Footer ── */}
+      <footer className="shrink-0 p-4 pb-6 md:pb-6 relative z-30">
+        {(chat.status === "CONNECTED" || chat.status === "PARTNER_LEFT") && (
+          <div className="max-w-[1000px] mx-auto">
+             <AnimatePresence>
+              {replyTo && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="mb-3 px-4 py-3 rounded-2xl bg-base-300/50 backdrop-blur-xl border border-base-content/10 flex items-center gap-3">
+                  <div className="w-1 rounded-full bg-primary h-8 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-primary font-bold uppercase tracking-wider mb-0.5">
+                      Replying to {replyTo.senderId === chat.session?.yourAnonymousId ? "yourself" : "stranger"}
+                    </p>
+                    <p className="text-sm text-base-content/60 truncate">
+                      {replyTo.messageType === "TEXT" ? replyTo.content : `[${replyTo.messageType}]`}
+                    </p>
+                  </div>
+                  <button onClick={() => setReplyTo(null)} className="btn btn-ghost btn-xs btn-square">
+                    <X size={14} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {chat.status === "CONNECTED" ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-end gap-2 bg-base-300/50 p-2 rounded-[28px] border border-base-content/10 shadow-inner focus-within:border-primary/50 transition-colors">
+                  <div className="relative group/attach">
+                    <button onClick={() => setShowAttachMenu(!showAttachMenu)} className={`btn btn-circle btn-sm h-11 w-11 ${showAttachMenu ? "btn-primary" : "btn-ghost bg-base-100/50"}`}>
+                      <Plus className={`transition-transform duration-300 ${showAttachMenu ? "rotate-45" : ""}`} size={20} />
+                    </button>
+                    <AnimatePresence>
+                      {showAttachMenu && (
+                        <motion.div initial={{ opacity: 0, scale: 0.9, y: -20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: -20 }} className="absolute bottom-full left-0 mb-4 flex flex-col gap-1 min-w-[200px] p-2 rounded-2xl bg-base-200 border border-base-content/10 shadow-2xl z-50">
+                          <button onClick={() => handleFileSelect("IMAGE")} className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-base-300 text-base-content transition-colors">
+                            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500"><ImageIcon size={18} /></div>
+                            <span className="text-sm font-semibold">Send Image</span>
+                          </button>
+                          <button onClick={() => handleFileSelect("VIDEO")} className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-base-300 text-base-content transition-colors">
+                            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500"><Video size={18} /></div>
+                            <span className="text-sm font-semibold">Send Video</span>
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    value={draft}
+                    onChange={(e) => { setDraft(e.target.value); chat.notifyTyping(); }}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message..."
+                    className="flex-1 bg-transparent border-none text-base-content focus:ring-0 placeholder-base-content/30 resize-none py-3 px-2 text-sm max-h-32 min-h-[20px]"
+                  />
+                  <button onClick={handleSend} disabled={!draft.trim()} className="btn btn-primary btn-circle h-11 w-11 shadow-lg shadow-primary/20">
+                    <Send size={18} />
+                  </button>
                 </div>
-                <button className="btn btn-ghost btn-xs btn-circle shrink-0" onClick={() => setReplyTo(null)}>
-                  <IconX />
-                </button>
+                <div className="flex items-center justify-between px-2 mt-4">
+                  <div className="flex items-center gap-4">
+                     <button onClick={handleNext} className="flex items-center gap-2 text-base-content/40 hover:text-primary transition-colors text-[10px] font-black uppercase tracking-[0.2em] leading-none group">
+                       <Zap size={14} className="group-hover:fill-current" /> Next Match
+                     </button>
+                     <button onClick={() => chat.clearMessages()} className="flex items-center gap-2 text-base-content/40 hover:text-warning transition-colors text-[10px] font-black uppercase tracking-[0.2em] leading-none">
+                       <Trash2 size={14} /> Clear
+                     </button>
+                     <button onClick={chat.leaveSession} className="flex items-center gap-2 text-base-content/40 hover:text-red-400 transition-colors text-[10px] font-black uppercase tracking-[0.2em] leading-none">
+                       <LogOut size={14} /> Leave
+                     </button>
+                  </div>
+                  <div className="flex items-center gap-2 text-base-content/20 select-none text-[10px] font-black uppercase tracking-[0.2em] leading-none">
+                    <IconShield /> <span>Private</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 bg-base-300/30 p-8 rounded-3xl border border-base-content/5 backdrop-blur-md">
+                <p className="text-sm text-base-content/50 font-bold uppercase tracking-widest">Stranger disconnected</p>
+                <div className="flex gap-3 w-full max-w-sm">
+                  <button onClick={chat.startSearch} className="btn btn-primary flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20">Find Someone New</button>
+                  <button onClick={onClose} className="btn bg-base-content/5 border-none flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-widest">Exit</button>
+                </div>
               </div>
             )}
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                className="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed focus:outline-none focus:border-blue-700 min-h-[42px] max-h-32"
-                rows={1}
-                placeholder="Type a message... (Enter to send)"
-                value={draft}
-                onChange={(e) => { setDraft(e.target.value); chat.notifyTyping(); }}
-                onKeyDown={handleKeyDown}
-                maxLength={2000}
-              />
-              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-[42px] h-[42px] p-0 rounded-xl shrink-0" onClick={handleSend} disabled={!draft.trim()}>
-                <IconSend />
-              </button>
-            </div>
-            <div className="flex items-center justify-between mt-2 gap-2">
-              <span className="flex items-center gap-1 text-[10px] text-base-content/40 shrink-0">
-                <IconShield /> Anonymous &amp; private
-              </span>
-              <div className="flex items-center gap-2">
-                <button className="btn btn-sm btn-outline border-base-300 gap-1.5 text-xs" onClick={handleNext}>
-                  <IconNext /> Next
-                </button>
-                <button className="btn btn-sm btn-error gap-1.5 text-xs" onClick={chat.leaveSession}>
-                  <IconLeave /> Leave
-                </button>
-              </div>
-            </div>
-          </footer>
+          </div>
         )}
+      </footer>
 
-        {/* ── Footer: PARTNER_LEFT ── */}
-        {chat.status === "PARTNER_LEFT" && (
-          <footer className="shrink-0 border-t border-base-300 bg-base-200 p-3">
-            <p className="text-center text-xs text-base-content/40 mb-3">Your chat partner has left.</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm gap-1.5" onClick={chat.startSearch}>
-                <IconNext /> Find New Stranger
-              </button>
-              <button className="btn btn-ghost btn-sm gap-1.5" onClick={() => { if (onClose) onClose(); }}>
-                <IconLeave /> Exit
+      {/* ── Media Preview Modal ── */}
+      <AnimatePresence>
+        {mediaPreview && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[100] bg-base-100 h-full w-full flex flex-col">
+            <div className="flex items-center justify-between p-6 bg-base-200/50 backdrop-blur-md border-b border-base-300">
+              <button onClick={() => setMediaPreview(null)} className="btn btn-ghost btn-square"><ArrowLeft size={20} /></button>
+              <h2 className="text-base-content font-black uppercase tracking-[0.2em] text-sm">Preview Media</h2>
+              <div className="w-10" />
+            </div>
+            <div className="flex-1 flex items-center justify-center p-6 bg-black relative">
+              {mediaPreview.type === "IMAGE" ? (
+                <img src={mediaPreview.url} alt="preview" className="max-w-full max-h-full object-contain" />
+              ) : (
+                <video src={mediaPreview.url} controls className="max-w-full max-h-full" />
+              )}
+            </div>
+            <div className="p-8 space-y-6 bg-base-100 border-t border-base-300">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-base-200 border border-base-content/10">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${mediaPreview.viewOnce ? "bg-warning/20 text-warning" : "bg-base-content/5 text-base-content/30"}`}>
+                    {mediaPreview.viewOnce ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-base-content">View Once</p>
+                    <p className="text-xs text-base-content/40">{mediaPreview.viewOnce ? "Media vanishes after opening" : "Standard permanent view"}</p>
+                  </div>
+                </div>
+                <input type="checkbox" className="toggle toggle-primary" checked={mediaPreview.viewOnce} onChange={(e) => setMediaPreview({...mediaPreview, viewOnce: e.target.checked})} />
+              </div>
+              <button onClick={handleSendMedia} disabled={isUploading} className="btn btn-primary w-full h-16 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-primary/30">
+                {isUploading ? <span className="loading loading-spinner" /> : <>Send to stranger <Send size={20} className="ml-2" /></>}
               </button>
             </div>
-          </footer>
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      <input type="file" ref={fileInputRef} className="hidden" onChange={onFileChange} />
+    </div>
+  );
+
+  if (chat.restoring) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-base-100 gap-4">
+        <span className="loading loading-spinner loading-lg text-primary" />
+        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-base-content/30">Syncing Session</p>
       </div>
     );
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Stranger Chat"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={handleBackdrop}
-    >
-      <div className="relative flex flex-col w-full max-w-md h-[85vh] max-h-[680px] rounded-2xl overflow-hidden bg-base-100 border border-base-300 shadow-2xl">
-
-        {/* ── Header ── */}
-        <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-base-200 border-b border-base-300">
-          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-700/10 text-blue-700 select-none">
-            <Dices size={20} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold leading-tight">Quick Chat</p>
-            <p className="text-xs text-base-content/50 truncate mt-0.5">
-              {(chat.status === "CONNECTED" || chat.status === "PARTNER_LEFT")
-                ? "You are chatting anonymously"
-                : "Connect with a random stranger"}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className={`w-2 h-2 rounded-full ${DOT_CLASS[chat.status]}`} />
-            <span className="text-xs text-base-content/50 hidden sm:inline">
-              {STATUS_LABEL[chat.status]}
-            </span>
-          </div>
-          <button className="btn btn-ghost btn-xs btn-circle ml-1" onClick={onClose} aria-label="Close">
-            <IconX />
-          </button>
-        </header>
-
-        {/* ── Body ── */}
-        <div className="flex-1 flex flex-col min-h-0">
-          {chat.status === "IDLE" && <IdleScreen onStart={chat.startSearch} />}
-          {chat.status === "SEARCHING" && (
-            <SearchingScreen queueSize={chat.queueSize} onCancel={chat.cancelSearch} />
-          )}
-          {(chat.status === "CONNECTED" || chat.status === "PARTNER_LEFT") && (
-            <MessageArea
-              messages={chat.messages ?? []}
-              myId={chat.session?.yourAnonymousId ?? ""}
-              partnerTyping={chat.partnerTyping}
-              bottomRef={bottomRef}
-              onReply={setReplyTo}
-            />
-          )}
-          {chat.status === "ERROR" && (
-            <ErrorScreen error={chat.error} onRetry={chat.startSearch} />
-          )}
-        </div>
-
-        {/* ── Footer: CONNECTED ── */}
-        {chat.status === "CONNECTED" && (
-          <footer className="shrink-0 border-t border-base-300 bg-base-200 px-3 pt-3 pb-3">
-            {replyTo && (
-              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-base-300 border-l-2 border-blue-700">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-blue-700 font-semibold leading-none mb-0.5">
-                    {replyTo.senderId === chat.session?.yourAnonymousId ? "You" : "Stranger"}
-                  </p>
-                  <p className="text-xs text-base-content/50 truncate">{replyTo.content}</p>
-                </div>
-                <button
-                  className="btn btn-ghost btn-xs btn-circle shrink-0"
-                  onClick={() => setReplyTo(null)}
-                  aria-label="Cancel reply"
-                >
-                  <IconX />
-                </button>
-              </div>
-            )}
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                className="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed focus:outline-none focus:border-blue-700 min-h-[42px] max-h-32"
-                rows={1}
-                placeholder="Type a message... (Enter to send)"
-                value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  chat.notifyTyping();
-                }}
-                onKeyDown={handleKeyDown}
-                maxLength={2000}
-                aria-label="Chat message"
-              />
-              <button
-                className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 w-[42px] h-[42px] p-0 rounded-xl shrink-0"
-                onClick={handleSend}
-                disabled={!draft.trim()}
-                aria-label="Send"
-              >
-                <IconSend />
-              </button>
-            </div>
-            <div className="flex items-center justify-between mt-2 gap-2">
-              <span className="flex items-center gap-1 text-[10px] text-base-content/40 shrink-0">
-                <IconShield />
-                Anonymous &amp; private
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  className="btn btn-sm btn-outline border-base-300 gap-1.5 text-xs"
-                  onClick={handleNext}
-                  aria-label="Next stranger"
-                >
-                  <IconNext />
-                  Next
-                </button>
-                <button
-                  className="btn btn-sm btn-error gap-1.5 text-xs"
-                  onClick={chat.leaveSession}
-                  aria-label="Leave chat"
-                >
-                  <IconLeave />
-                  Leave
-                </button>
-              </div>
-            </div>
-          </footer>
-        )}
-
-        {/* ── Footer: PARTNER_LEFT ── */}
-        {chat.status === "PARTNER_LEFT" && (
-          <footer className="shrink-0 border-t border-base-300 bg-base-200 p-3">
-            <p className="text-center text-xs text-base-content/40 mb-3">
-              Your chat partner has left.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm gap-1.5" onClick={chat.startSearch}>
-                <IconNext />
-                Find New Stranger
-              </button>
-              <button className="btn btn-ghost btn-sm gap-1.5" onClick={onClose}>
-                <IconLeave />
-                Exit
-              </button>
-            </div>
-          </footer>
-        )}
-
-      </div>
+    <div className={standalone ? "w-full h-full bg-base-100" : "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"} onClick={handleBackdrop}>
+      {renderContent()}
     </div>
   );
 }
 
-// ── Sub-components (identical to your original) ───────────────────────────────
+// ── Sub-components ───────────────────────────────────────────────────────────
 
 function IdleScreen({ onStart }: { onStart: () => void }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-blue-700/10 flex items-center justify-center text-blue-700 mb-2">
-        <Dices size={40} />
-      </div>
-      <div>
-        <h3 className="font-bold text-base">Meet a Random Stranger</h3>
-        <p className="mt-1 text-sm text-base-content/50 max-w-[260px] mx-auto">
-          Completely anonymous · No profile shared · Just a conversation
+    <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-transparent">
+      <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-32 h-32 rounded-[48px] bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center text-primary mb-8 shadow-inner border border-primary/5 relative">
+        <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-50 opacity-50" />
+        <Dices size={56} className="relative z-10" />
+      </motion.div>
+      <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
+        <h3 className="text-4xl font-black text-base-content tracking-tighter mb-4">Connect with Neighbors.</h3>
+        <p className="text-sm text-base-content/40 max-w-[280px] mx-auto leading-relaxed font-semibold">
+          Secure, anonymous, and ephemeral connections with local people in your area.
         </p>
-      </div>
-      <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-wide mt-2" onClick={onStart}>
+      </motion.div>
+      <motion.button initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={onStart} className="btn btn-primary w-full max-w-[280px] h-16 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] mt-12 shadow-2xl shadow-primary/20 border-none">
         Start Chatting
-      </button>
-      <ul className="flex flex-col gap-2 text-xs text-base-content/40 mt-1 list-none p-0">
-        <li className="flex items-center justify-center gap-2">
-          <User size={12} />
-          <span>Your identity is never revealed</span>
-        </li>
-        <li className="flex items-center justify-center gap-2">
-          <Zap size={12} />
-          <span>Instant match when someone is waiting</span>
-        </li>
-      </ul>
+      </motion.button>
+      <div className="flex flex-col gap-3 mt-16 text-base-content/20 text-[10px] uppercase font-black tracking-[0.3em]"><IconShield /> <span>Private Relay Active</span></div>
     </div>
   );
 }
 
 function SearchingScreen({ queueSize, onCancel }: { queueSize: number | null; onCancel: () => void }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8 text-center">
-      <div className="relative w-16 h-16 flex items-center justify-center">
-        <span className="absolute inset-0 rounded-full bg-blue-700/20 animate-ping" />
-        <span className="relative w-12 h-12 rounded-full bg-blue-700/20 flex items-center justify-center text-blue-700">
-          <Search size={24} />
-        </span>
+    <div className="h-full flex flex-col items-center justify-center p-12 text-center relative overflow-hidden">
+      <div className="relative">
+        <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0.1, 0.3] }} transition={{ duration: 3, repeat: Infinity }} className="absolute inset-[-60px] rounded-full bg-primary/20 blur-3xl" />
+        <div className="w-24 h-24 rounded-full bg-base-300 border border-base-content/5 flex items-center justify-center relative z-10 shadow-2xl">
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 4, repeat: Infinity, ease: "linear" }} className="text-primary"><Search size={40} /></motion.div>
+        </div>
       </div>
-      <div>
-        <h3 className="font-bold text-base">Looking for someone...</h3>
-        <p className="mt-1 text-sm text-base-content/50">
-          {queueSize != null
-            ? `${queueSize} ${queueSize === 1 ? "person" : "people"} in queue`
-            : "Connecting to matchmaking..."}
-        </p>
+      <div className="mt-12 space-y-3">
+        <h3 className="text-2xl font-black text-base-content tracking-tight">Finding a match...</h3>
+        <p className="text-sm text-base-content/40 font-bold uppercase tracking-widest">{queueSize != null ? `${queueSize} people discoverying` : "Scanning network..."}</p>
       </div>
-      <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel search</button>
+      <button onClick={onCancel} className="btn btn-ghost mt-16 px-10 h-12 rounded-xl text-base-content/40 hover:text-base-content font-black text-[10px] uppercase tracking-[0.3em]">Stop Search</button>
     </div>
   );
 }
 
 function ErrorScreen({ error, onRetry }: { error: string | null; onRetry: () => void }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
-      <div className="w-14 h-14 rounded-full bg-error/10 flex items-center justify-center text-error mb-2">
-        <AlertTriangle size={32} />
-      </div>
+    <div className="h-full flex flex-col items-center justify-center gap-8 p-8 text-center bg-transparent">
+      <div className="w-20 h-20 rounded-[28px] bg-error/10 flex items-center justify-center text-error shadow-inner border border-error/10"><AlertTriangle size={40} /></div>
       <div>
-        <h3 className="font-bold text-base">Something went wrong</h3>
-        <p className="mt-1 text-sm text-error max-w-[280px] mx-auto">{error ?? "An unexpected error occurred."}</p>
+        <h3 className="text-2xl font-black text-base-content mb-3 tracking-tight">Connection Lost</h3>
+        <p className="text-sm text-base-content/40 max-w-[280px] mx-auto leading-relaxed">{error ?? "There was a problem with the chat relay."}</p>
       </div>
-      <button className="btn bg-blue-700 text-white font-semibold border-none hover:bg-blue-800 btn-sm" onClick={onRetry}>Try Again</button>
+      <button onClick={onRetry} className="btn btn-error btn-outline h-14 px-12 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:shadow-xl hover:shadow-error/20 transition-all">Retry Link</button>
     </div>
   );
 }
 
-function MessageArea({
-  messages, myId, partnerTyping, bottomRef, onReply,
-}: {
-  messages: ChatMessageDto[];
-  myId: string;
-  partnerTyping: boolean;
-  bottomRef: React.RefObject<HTMLDivElement | null>;
-  onReply: (r: ReplyTo) => void;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-0.5">
-      {messages.map((msg, i) => (
-        <Bubble
-          key={msg.messageId ?? i}
-          msg={msg}
-          isMine={msg.senderId === myId}
-          allMessages={messages}
-          onReply={onReply}
-        />
-      ))}
-      {partnerTyping && (
-        <div className="chat chat-start">
-          <div className="chat-bubble chat-bubble-neutral flex gap-1 items-center py-3 px-4">
-            <span className="typing-dot" />
-            <span className="typing-dot" style={{ animationDelay: "0.2s" }} />
-            <span className="typing-dot" style={{ animationDelay: "0.4s" }} />
-          </div>
-        </div>
-      )}
-      <div ref={bottomRef} />
-    </div>
-  );
-}
-
-function Bubble({
-  msg, isMine, allMessages, onReply,
-}: {
-  msg: ChatMessageDto;
-  isMine: boolean;
-  allMessages: ChatMessageDto[];
-  onReply: (r: ReplyTo) => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-
-  const isSystem =
-    msg.senderId === "SYSTEM" || msg.messageType === "SYSTEM" || msg.messageType === "USER_LEFT";
-
-  if (isSystem) {
-    return (
-      <p className="text-center text-[11px] text-base-content/40 py-1.5 select-none">{msg.content}</p>
-    );
-  }
-
-  const time = msg.timestamp
-    ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "";
-
-  const replyToId  = (msg as any).replyToId as string | undefined;
-  const repliedMsg = replyToId ? allMessages.find(m => m.messageId === replyToId) : null;
-  const truncate   = (s: string, max = 55) => s.length > max ? s.slice(0, max) + "…" : s;
+function MessageArea({ messages, myId, partnerTyping, bottomRef, onReply }: { messages: ChatMessageDto[]; myId: string; partnerTyping: boolean; bottomRef: React.RefObject<HTMLDivElement | null>; onReply: (r: { messageId: string; senderId: string; content?: string; messageType: MessageType }) => void }) {
+  const hasSentMessage = messages.some(m => m.senderId === myId);
 
   return (
-    <div
-      className="relative group"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className={`chat ${isMine ? "chat-end" : "chat-start"}`}>
-        {!isMine && (
-          <div className="chat-header text-[10px] text-base-content/40 mb-0.5">Stranger</div>
-        )}
-        <div className={`chat-bubble text-sm ${isMine ? "bg-[#1D4ED8] text-white chat-bubble" : "chat-bubble-neutral"} flex flex-col gap-1`}>
-          {repliedMsg && (
-            <div className="flex gap-1.5 pb-1.5 mb-0.5 border-b border-white/10">
-              <div className="w-0.5 rounded-full bg-white/50 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold opacity-80 mb-0.5">
-                  {repliedMsg.senderId === msg.senderId ? (isMine ? "You" : "Stranger") : (isMine ? "Stranger" : "You")}
-                </p>
-                <p className="text-xs opacity-60 leading-tight truncate max-w-[180px]">
-                  {truncate(repliedMsg.content)}
-                </p>
-              </div>
+    <div className="flex-1 overflow-y-auto px-4 py-8 md:px-8 custom-scrollbar scroll-smooth flex flex-col gap-2">
+      <div className="mb-auto" />
+      
+      <AnimatePresence>
+        {!hasSentMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex flex-col items-center gap-6 p-8 mb-8 bg-base-300/20 rounded-[32px] border border-base-content/5 backdrop-blur-md text-center max-w-sm mx-auto"
+          >
+            <div className="space-y-2">
+              <h3 className="text-sm font-black uppercase tracking-[0.3em] text-primary">Chat Controls</h3>
+              <p className="text-[10px] text-base-content/30 font-bold uppercase tracking-widest leading-relaxed">
+                Before you start, here's how to manage your session:
+              </p>
             </div>
-          )}
-          {msg.content}
+            
+            <div className="grid gap-4 w-full">
+              {[
+                { icon: <Zap size={14} />, label: "Next Match", desc: "Instantly find a new stranger" },
+                { icon: <Trash2 size={14} />, label: "Clear Chat", desc: "Wipe local messages" },
+                { icon: <LogOut size={14} />, label: "Leave", desc: "Exit current conversation" }
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-4 text-left p-3 rounded-2xl bg-base-100/40 border border-base-content/5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">{item.icon}</div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-base-content/60">{item.label}</p>
+                    <p className="text-[9px] text-base-content/30 font-bold uppercase tracking-wider mt-0.5">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[9px] text-base-content/20 font-black uppercase tracking-[0.4em] animate-pulse">Waiting for your first message...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {messages.map((msg, i) => <Bubble key={msg.messageId ?? i} msg={msg} isMine={msg.senderId === myId} allMessages={messages} onReply={onReply} />)}
+      {partnerTyping && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start px-2 py-2">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-[24px] bg-base-300/80 backdrop-blur-md border border-base-content/5 shadow-sm">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-duration:0.8s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-duration:0.8s] [animation-delay:0.2s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-duration:0.8s] [animation-delay:0.4s]" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-base-content/40">Stranger is typing</span>
+          </div>
+        </motion.div>
+      )}
+      <div ref={bottomRef} className="h-4 shrink-0" />
+    </div>
+  );
+}
+
+function Bubble({ msg, isMine, allMessages, onReply }: { msg: ChatMessageDto; isMine: boolean; allMessages: ChatMessageDto[]; onReply: (r: { messageId: string; senderId: string; content?: string; messageType: MessageType }) => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [showViewOnce, setShowViewOnce] = useState(false);
+  
+  const dragX = useMotionValue(0);
+  const replyIconScale = useTransform(dragX, [0, 50, 80], [0, 0.8, 1.2]);
+  const replyIconOpacity = useTransform(dragX, [0, 50, 80], [0, 0.5, 1]);
+
+  const isSystem = msg.senderId === "SYSTEM" || msg.messageType === "SYSTEM" || msg.messageType === "USER_LEFT" || msg.messageType === "CHAT_ENDED" || msg.messageType === "USER_JOINED";
+  if (isSystem) return <div className="w-full flex justify-center py-6 px-10"><p className="text-[10px] text-base-content/20 uppercase tracking-[0.3em] font-black text-center leading-relaxed max-w-[80%]">{msg.content}</p></div>;
+  
+  const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  const repliedMsg = msg.replyToId ? allMessages.find(m => m.messageId === msg.replyToId || (m.messageId.startsWith('local-') && m.messageId === msg.replyToId)) : null;
+  const truncate = (s: string, max = 50) => s.length > max ? s.slice(0, max) + "..." : s;
+  const isMedia = msg.messageType === "IMAGE" || msg.messageType === "VIDEO";
+
+  const renderMedia = () => {
+    if (msg.viewOnce && !showViewOnce) return <div onClick={() => setShowViewOnce(true)} className="relative w-72 aspect-video rounded-3xl bg-base-content/5 backdrop-blur-3xl flex flex-col items-center justify-center gap-4 cursor-pointer group/vo border border-base-content/5 hover:bg-base-content/10 transition-colors"><div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-base-content/60 shadow-2xl"><EyeOff size={32} /></div><p className="text-[10px] font-black text-base-content/60 uppercase tracking-[0.4em]">Unlock Private Media</p></div>;
+    return <div className="relative overflow-hidden rounded-2xl bg-base-100 shadow-2xl ring-1 ring-base-content/5">
+      {msg.messageType === "IMAGE" ? <img src={msg.mediaPayload} className="max-w-full max-h-[500px] object-cover cursor-pointer" onClick={() => window.open(msg.mediaPayload, "_blank")} alt="" /> : <video src={msg.mediaPayload} controls className="max-w-full max-h-[500px]" onEnded={() => msg.viewOnce && setShowViewOnce(false)} />}
+      {msg.viewOnce && <div className="absolute top-4 right-4 px-3 py-1.5 bg-warning/90 backdrop-blur-md rounded-xl text-[10px] font-black text-warning-content uppercase tracking-widest flex items-center gap-2 shadow-xl shrink-0"><EyeOff size={14} /> One-Time View</div>}
+    </div>;
+  };
+
+  const handleDragEnd = (_: any, info: any) => {
+    const threshold = isMine ? -60 : 60;
+    if ((!isMine && info.offset.x > threshold) || (isMine && info.offset.x < threshold)) {
+       onReply({ messageId: msg.messageId, senderId: msg.senderId, content: msg.content, messageType: msg.messageType });
+    }
+  };
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`relative flex flex-col ${isMine ? "items-end" : "items-start"} group px-1 mb-1`} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      
+      {/* Swipe Background Indicator */}
+      <motion.div 
+        style={{ scale: replyIconScale, opacity: replyIconOpacity }}
+        className={`absolute top-1/2 -translate-y-1/2 p-2 text-primary/40 pointer-events-none ${isMine ? "right-2" : "left-2"}`}
+      >
+        <IconReply />
+      </motion.div>
+
+      <motion.div 
+        drag="x"
+        dragConstraints={{ left: isMine ? -100 : 0, right: isMine ? 0 : 100 }}
+        dragElastic={0.2}
+        style={{ x: dragX }}
+        onDragEnd={handleDragEnd}
+        onClick={() => onReply({ messageId: msg.messageId, senderId: msg.senderId, content: msg.content, messageType: msg.messageType })}
+        className={`max-w-[80%] md:max-w-[65%] rounded-2xl overflow-hidden cursor-pointer select-none relative z-10 transition-shadow 
+          ${isMine 
+            ? "bg-gradient-to-br from-primary/95 to-primary text-white shadow-sm" 
+            : "bg-base-content/5 backdrop-blur-xl text-base-content border border-base-content/5 shadow-sm"
+          } ${isMedia ? "p-1" : "px-3.5 py-2"}`}
+      >
+        {repliedMsg && (
+          <div className={`mb-2 pl-2 border-l-2 transition-colors ${
+            isMine ? "border-white/40 bg-white/5" : "border-primary/60 bg-primary/5"
+          } py-1.5 pr-2 rounded-r-lg`}>
+            <p className={`text-[8px] font-black uppercase tracking-[0.1em] mb-0.5 ${isMine ? "text-white/60" : "text-primary/70"}`}>
+              {repliedMsg.senderId === (isMine ? msg.senderId : "STRANGER") ? "You" : "Stranger"}
+            </p>
+            <p className={`text-[11px] ${isMine ? "text-white/80" : "text-base-content/50"} truncate leading-none`}>
+              {repliedMsg.messageType === "TEXT" ? truncate(repliedMsg.content || "") : `[${repliedMsg.messageType}]`}
+            </p>
+          </div>
+        )}
+        
+        {isMedia ? renderMedia() : <p className="text-[13px] whitespace-pre-wrap break-words leading-[1.4] font-medium tracking-tight px-0.5">{msg.content}</p>}
+        
+        <div className={`flex items-center gap-2 mt-1 ${isMine ? "justify-end text-white/40" : "justify-start text-base-content/20"}`}>
+          <span className="text-[8px] font-bold uppercase tracking-widest">{time}</span>
         </div>
-        {time && <div className="chat-footer opacity-40 text-[10px] mt-0.5">{time}</div>}
-      </div>
-      {hovered && (
-        <div className={`absolute top-1/2 -translate-y-1/2 ${isMine ? "left-2" : "right-2"}`}>
-          <button
-            className="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-100"
-            onClick={() => onReply({ messageId: msg.messageId, senderId: msg.senderId, content: msg.content })}
-            aria-label="Reply"
+      </motion.div>
+
+      <AnimatePresence>
+        {hovered && (
+          <motion.button 
+            initial={{ opacity: 0, scale: 0.8 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.8 }} 
+            onClick={() => onReply({ messageId: msg.messageId, senderId: msg.senderId, content: msg.content, messageType: msg.messageType })} 
+            className={`absolute top-1/2 -translate-y-1/2 btn btn-circle btn-xs bg-base-200/50 backdrop-blur-md border border-base-content/10 text-base-content/40 hover:text-primary transition-all shadow-lg hidden md:flex ${isMine ? "-left-10" : "-right-10"}`}
           >
             <IconReply />
-          </button>
-        </div>
-      )}
-    </div>
+          </motion.button>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

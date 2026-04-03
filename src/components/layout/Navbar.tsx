@@ -16,12 +16,17 @@ import { useEffect, useState, useCallback } from "react";
 import CreatePost from "../ui/CreatePost";
 import SearchOverlay from "../search/SearchOverlay";
 import NotificationDropdown from "./NotificationDropdown";
+import { useCurrentUser } from "../../hooks/useUser";
+import { useUnreadNotificationsCount } from "../../hooks/useNotification";
 
 const Navbar = () => {
   const [openCreate, setOpenCreate] = useState(false);
   const [theme, setTheme] = useState("light");
-  const [username, setUsername] = useState("User");
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  
+  const { data: user } = useCurrentUser();
+  const { data: unreadNotifications = 0, refetch: refetchUnreadCount } = useUnreadNotificationsCount();
+  
+  const username = user?.actualUsername ?? user?.username ?? "User";
 
   // ── Search overlay state ───────────────────────────────────────────────────
   const [searchOpen, setSearchOpen] = useState(false);
@@ -52,49 +57,7 @@ const Navbar = () => {
     localStorage.setItem("theme", newTheme);
   };
 
-  // ── Avatar letter from /api/users/me ──────────────────────────────────────
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    fetch("/api/users/me", {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch user");
-        return res.json();
-      })
-      .then((body) => {
-        const user = body?.data;
-        const name = user?.actualUsername ?? user?.username;
-        if (name) setUsername(name);
-      })
-      .catch(() => setUsername("User"));
-  }, []);
-
-  const fetchUnreadCount = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    try {
-      const res = await fetch("/api/notifications/unread/count", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUnreadNotifications(data.count || 0);
-      }
-    } catch (err) {
-      console.error("Failed to fetch unread count", err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 60000);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+  // (Effect for unread count is now handled by useUnreadNotificationsCount hook)
 
   return (
     <>
@@ -189,7 +152,7 @@ const Navbar = () => {
               <Search size={18} />
             </button>
 
-            {/* CREATE */}
+            {/* CREATE - Desktop */}
             <button
               onClick={() => setOpenCreate(true)}
               className="btn btn-sm bg-blue-700 hidden sm:flex gap-1 text-white"
@@ -198,13 +161,23 @@ const Navbar = () => {
               Create
             </button>
 
-            <NavLink to="/quick-chat" className="btn btn-ghost btn-sm hover:bg-blue-700/10">
+            {/* MOBILE CREATE ICON */}
+            <button
+              onClick={() => setOpenCreate(true)}
+              className="btn btn-ghost btn-sm sm:hidden hover:bg-blue-700/10"
+              aria-label="Create post"
+            >
+              <Plus size={18} />
+            </button>
+
+            {/* CHAT - HIDE ON MOBILE */}
+            <NavLink to="/quick-chat" className="btn btn-ghost btn-sm hover:bg-blue-700/10 hidden sm:inline-flex">
               <MessageCircle size={18} />
             </NavLink>
 
             <NotificationDropdown 
               unreadCount={unreadNotifications} 
-              onRefresh={fetchUnreadCount} 
+              onRefresh={refetchUnreadCount} 
             />
 
             {/* THEME TOGGLE */}

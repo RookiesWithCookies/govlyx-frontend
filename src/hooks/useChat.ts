@@ -68,6 +68,7 @@ export interface UseChatReturn {
   notifyTyping: () => void;
   leaveSession: () => Promise<void>;
   resetChat:    () => void;
+  clearMessages: () => void;
 }
 
 // ── Merge helpers ─────────────────────────────────────────────────────────────
@@ -367,12 +368,29 @@ export function useChat(): UseChatReturn {
         _startPolling();
       }
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
       if (err instanceof ChatAuthError) {
         setError("Session expired — please log in again.");
+        setStatus("ERROR");
+      } else if (msg.toLowerCase().includes("already in session")) {
+        // AUTOMATIC RECOVERY: User is already matched, just join that session!
+        try {
+          const sres = await chatApi.getCurrentSession();
+          if (sres.success && sres.data) {
+            _stopPolling();
+            await onMatchSuccess(sres.data);
+          } else {
+            setError("Could not reconnect to your session.");
+            setStatus("ERROR");
+          }
+        } catch {
+          setError("Failed to rejoin active session.");
+          setStatus("ERROR");
+        }
       } else {
-        setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+        setError(msg || "An unexpected error occurred.");
+        setStatus("ERROR");
       }
-      setStatus("ERROR");
     }
   }, [onMatchSuccess, _startPolling]);
 
@@ -406,7 +424,7 @@ export function useChat(): UseChatReturn {
       setMessages((prev) => [...prev, optimistic]);
     }
 
-    chatSocket.sendMessage(trimmed);
+    chatSocket.sendMessage(trimmed, replyToId);
   }, []); // reads session via sessionRef — no stale closure
 
   const notifyTyping = useCallback(() => {
@@ -441,8 +459,12 @@ export function useChat(): UseChatReturn {
     _resetLocalState(); // already calls sessionStore.clear()
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+  }, []);
+
   return {
     status, messages, session, queueSize, partnerTyping, error, restoring,
-    startSearch, cancelSearch, sendMessage, notifyTyping, leaveSession, resetChat,
+    startSearch, cancelSearch, sendMessage, notifyTyping, leaveSession, resetChat, clearMessages,
   };
 }
