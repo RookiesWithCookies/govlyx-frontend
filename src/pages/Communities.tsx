@@ -1714,8 +1714,7 @@ function DetailPanel({
           const backendPending = detail.hasPendingRequest === true || detail.pendingRequest === true || detail.hasPendingRequest === "true" || detail.pendingRequest === "true";
           const communityId = detail.id ?? community.id;
           const localPending = getPendingLocal().includes(String(communityId));
-          const local = (myCommunities as CommunityData[]).find((x: CommunityData) => x.id === communityId);
-          const finalIsOwner = detail.isOwner === true || detail.owner === true || detail.isOwner === "true" || detail.owner === "true" || !!local?.isOwner;
+          const finalIsOwner = detail.isOwner === true || detail.owner === true || detail.isOwner === "true" || detail.owner === "true" || !!community?.isOwner;
 
           if (fetchedMember || finalIsOwner) removePendingLocal(communityId);
           else if (backendPending) addPendingLocal(communityId);
