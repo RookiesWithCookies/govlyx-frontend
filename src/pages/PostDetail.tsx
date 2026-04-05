@@ -107,6 +107,14 @@ const PostDetail: React.FC = () => {
           onSave={(savedId, saved) => {
              setPost(prev => prev && prev.id === savedId ? { ...prev, isSaved: saved } as any : prev);
           }}
+          onVote={async (pollId, ids) => {
+            try {
+              await postService.voteInPoll(pollId, ids);
+              setPost(prev => prev ? { ...prev, userHasVoted: true, votedOptionIds: ids } as any : prev);
+            } catch (err) {
+              console.error("Detail vote error:", err);
+            }
+          }}
           onDelete={() => {
              navigate("/", { replace: true });
           }}

@@ -18,13 +18,13 @@ export function usePostInteractions(postId: number, postType: "posts" | "social-
       // For now, we'll return a rollback function or just handle it in the component
       return { prevPosts: queryClient.getQueryData(["posts"]) };
     },
-    onSuccess: (data) => {
+    onSuccess: (_data) => {
       // Invalidate queries to sync state across the app
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
       queryClient.invalidateQueries({ queryKey: ["post", postId] });
     },
-    onError: (err, variables, context) => {
+    onError: (_err, _variables, _context) => {
       // Rollback if needed
     },
   });

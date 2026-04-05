@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   ThumbsDown,
   Heart,
@@ -22,7 +22,6 @@ import {
   Play,
   Volume2,
   VolumeX,
-  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import CommentSection from "./CommentSection";
@@ -55,7 +54,7 @@ async function recordShare(postType: "posts" | "social-posts", id: number) {
   } catch {
     window.prompt("Copy link:", url);
   }
-  apiPost(`/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`, {}).catch(() => {});
+  apiPost(`/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`, {}).catch(() => { });
 }
 
 function useCopied() {
@@ -398,11 +397,10 @@ function ModernMediaCarousel({
                 setActiveIndex(i);
               }}
               whileTap={{ scale: 0.8 }}
-              className={`rounded-full transition-all duration-300 ${
-                i === activeIndex
+              className={`rounded-full transition-all duration-300 ${i === activeIndex
                   ? "w-6 h-2 bg-white shadow-lg"
                   : "w-2 h-2 bg-white/50 hover:bg-white/80"
-              }`}
+                }`}
             />
           ))}
         </div>
@@ -487,11 +485,10 @@ function CommunityStrip({
             e.stopPropagation();
             onJoin(communityId);
           }}
-          className={`shrink-0 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all border ${
-            isJoined
+          className={`shrink-0 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all border ${isJoined
               ? "bg-base-200 text-base-content/70 border-base-300"
               : "bg-rose-50 text-rose-500 border-rose-100/50 hover:bg-rose-100 shadow-sm shadow-rose-200/20"
-          }`}
+            }`}
         >
           {isJoined ? <CheckCircle2 size={12} className="inline mr-1" /> : <UserPlus size={12} className="inline mr-1" />}
           {isJoined ? "Joined" : "Join"}
@@ -569,16 +566,16 @@ function AuthorRow({
       <div className="flex items-center gap-2">
         {rightAction}
         {showDelete && onDelete && (
-        <motion.button
-          onClick={onDelete}
-          disabled={isDeleting}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          className="p-2 text-base-content/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-40"
-          title="Delete post"
-        >
-          {isDeleting ? <span className="loading loading-spinner loading-xs" /> : <Trash2 size={16} />}
-        </motion.button>
+          <motion.button
+            onClick={onDelete}
+            disabled={isDeleting}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="p-2 text-base-content/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-40"
+            title="Delete post"
+          >
+            {isDeleting ? <span className="loading loading-spinner loading-xs" /> : <Trash2 size={16} />}
+          </motion.button>
         )}
       </div>
     </motion.div>
@@ -719,13 +716,11 @@ function ActionPill({
       whileHover={{ scale: disabled ? 1 : 1.08, y: -2 }}
       whileTap={{ scale: disabled ? 1 : 0.92 }}
       transition={{ type: "spring", stiffness: 400, damping: 15 }}
-      className={`flex items-center gap-2 rounded-xl transition-all duration-200 disabled:opacity-30 select-none ${
-        vertical ? "p-3 flex-col min-w-[54px]" : "px-4 py-2.5"
-      } text-[11px] font-black uppercase tracking-wider ${
-        active
-          ? `${activeClass} shadow-none`
-          : "text-base-content/50 hover:bg-base-200 hover:text-base-content"
-      }`}
+      className={`flex items-center gap-2 rounded-xl transition-all duration-200 disabled:opacity-30 select-none border border-transparent ${vertical ? "p-3 flex-col min-w-[54px]" : "px-4 py-2.5"
+        } text-[11px] font-black uppercase tracking-wider ${active
+          ? `${activeClass} shadow-sm shadow-current/5`
+          : "text-base-content/50 border-transparent hover:bg-base-200 hover:text-base-content"
+        }`}
     >
       {children}
     </motion.button>
@@ -741,12 +736,16 @@ function PollBody({
   onVote?: (pollId: number, ids: number[]) => void;
 }) {
   const [votedIds, setVotedIds] = useState<number[]>(post?.votedOptionIds || []);
-  
+
+  useEffect(() => {
+    setVotedIds(post?.votedOptionIds || []);
+  }, [post?.votedOptionIds]);
+
   if (!post || !post.options || !Array.isArray(post.options) || post.options.length === 0) {
     return null;
   }
 
-  const showResults = post.showResults || post.userHasVoted || post.isExpired;
+  const showResults = post.showResults || post.userHasVoted || post.isExpired || votedIds.length > 0;
 
   const handleVote = (optionId: number) => {
     if (post.isExpired || post.userHasVoted) return;
@@ -759,50 +758,73 @@ function PollBody({
     onVote?.(post.pollId, next);
   };
 
+  // ─── Optimistic Updates ──────────────────────────────────────────
+  const isOptimistic = !post.userHasVoted && votedIds.length > 0;
+  const displayedTotalVotes = isOptimistic ? post.totalVotes + 1 : post.totalVotes;
+  const displayedOptions = useMemo(() => {
+    if (!isOptimistic) return post.options;
+    return post.options.map((opt: PollOption) => {
+      const isSelected = votedIds.includes(opt.id);
+      const newCount = isSelected ? (opt.voteCount || 0) + 1 : (opt.voteCount || 0);
+      const newPercent = displayedTotalVotes > 0 ? (newCount / displayedTotalVotes) * 100 : 0;
+      return { ...opt, percentage: newPercent };
+    });
+  }, [post.options, votedIds, isOptimistic, displayedTotalVotes]);
+  // ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="space-y-3 w-full">
-      {post.options.map((opt) => {
-        const isSelected = votedIds.includes(opt.id);
-        return (
-          <motion.div
-            key={opt.id}
-            onClick={() => handleVote(opt.id)}
-            className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${
-              isSelected ? "border-blue-500 bg-blue-500/5" : "border-base-300 hover:border-base-content/20"
-            }`}
-            whileHover={{ x: 4 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {showResults && (
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${opt.percentage}%` }}
-                className={`absolute inset-y-0 left-0 transition-all ${
-                  isSelected ? "bg-blue-500/20" : "bg-base-content/5"
+    <div className="space-y-2 w-full mt-2">
+      <div className="space-y-2">
+        {displayedOptions.map((opt) => {
+          const isSelected = votedIds.includes(opt.id);
+          return (
+            <motion.div
+              key={opt.id}
+              onClick={() => handleVote(opt.id)}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              className={`relative overflow-hidden rounded-lg border transition-all cursor-pointer ${isSelected ? "border-blue-500/50 shadow-sm shadow-blue-500/10" : "border-base-content/10"
                 }`}
+            >
+              {/* Progress */}
+              <motion.div
+                initial={false}
+                animate={{ width: showResults ? `${opt.percentage}%` : "0%" }}
+                className={`absolute left-0 top-0 h-full transition-all duration-500 ease-out ${isSelected ? "bg-blue-500/10" : "bg-base-content/5"
+                  }`}
               />
-            )}
-            <div className="relative z-10 p-3.5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                  isSelected ? "border-blue-500 bg-blue-500" : "border-base-content/20"
-                }`}>
-                  {isSelected && <Check size={12} className="text-white" />}
+
+              {/* Content */}
+              <div className="relative z-10 flex items-center justify-between px-3.5 py-2.5 text-sm">
+                <div className="flex items-center gap-3">
+                  {/* Radio Indicator */}
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${isSelected ? "border-blue-500 bg-blue-500" : "border-base-content/20"
+                    }`}>
+                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+
+                  <span className={`font-semibold ${isSelected ? "text-blue-400" : "text-base-content/80 text-[13px]"}`}>
+                    {opt.optionText}
+                  </span>
                 </div>
-                <span className={`text-sm font-bold ${isSelected ? "text-blue-600" : "text-base-content/80"}`}>
-                  {opt.optionText}
-                </span>
+                {showResults && (
+                  <span className="font-bold opacity-60 text-xs text-base-content">
+                    {Math.round(opt.percentage)}%
+                  </span>
+                )}
               </div>
-              {showResults && (
-                <span className="text-xs font-black text-base-content/40">{Math.round(opt.percentage)}%</span>
-              )}
-            </div>
-          </motion.div>
-        );
-      })}
-      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-base-content/30 px-1">
-        <span>{post.totalVotes.toLocaleString()} votes</span>
-        <span>{post.timeLeft || "Ended"}</span>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Meta */}
+      <div className="mt-3 flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest opacity-60 px-1 text-base-content">
+        <span>{displayedTotalVotes.toLocaleString()} {displayedTotalVotes === 1 ? "vote" : "votes"}</span>
+        <span className="flex items-center gap-1.5">
+          <Clock size={12} />
+          {post.timeLeft || "Ended"}
+        </span>
       </div>
     </div>
   );
@@ -1022,31 +1044,31 @@ export default function PostCard({
 
           {/* Header Row: Author + Join */}
           <div className="flex items-start justify-between gap-3">
-             {isGovt ? (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center gap-3"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-red-400/10 flex items-center justify-center shrink-0">
-                    <BadgeCheck size={18} className="text-red-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-red-500/80 truncate">
-                      {(post as GovernmentPost).department}
-                    </p>
-                    <p className="text-[10px] text-base-content/50 mt-0.5">{post.timeAgo ?? "just now"}</p>
-                  </div>
-                </motion.div>
-              ) : (
-                <AuthorRow
-                  post={post}
-                  badge={isCommunity ? (post as CommunityPost).authorRole : undefined}
-                  onDelete={handleDelete}
-                  isDeleting={isDeleting}
-                  showDelete={!!(post as any).canDelete || post.username === currentUser?.username}
-                />
-              )}
+            {isGovt ? (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-lg bg-red-400/10 flex items-center justify-center shrink-0">
+                  <BadgeCheck size={18} className="text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-red-500/80 truncate">
+                    {(post as GovernmentPost).department}
+                  </p>
+                  <p className="text-[10px] text-base-content/50 mt-0.5">{post.timeAgo ?? "just now"}</p>
+                </div>
+              </motion.div>
+            ) : (
+              <AuthorRow
+                post={post}
+                badge={isCommunity ? (post as CommunityPost).authorRole : undefined}
+                onDelete={handleDelete}
+                isDeleting={isDeleting}
+                showDelete={!!(post as any).canDelete || post.username === currentUser?.username}
+              />
+            )}
           </div>
 
           {/* Meta row */}
@@ -1122,75 +1144,75 @@ export default function PostCard({
 
           {/* Conditional Body Layout */}
           <div className={hasMedia ? "flex gap-4 items-start" : "flex flex-col gap-4"}>
-             <div className="flex-1 min-w-0 flex flex-col gap-4">
-                {hasMedia && (
-                  <div className="-mx-1">
-                    <ModernMediaCarousel mediaUrls={allMediaUrls} onExpand={() => setLightboxOpen(true)} />
-                  </div>
-                )}
-                
-                {/* Poll Variant Rendering */}
-                {post.variant === "poll" && (post as any).options && (
-                   <PollBody post={post as PollPost} onVote={onVote} />
-                )}
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+              {hasMedia && (
+                <div className="-mx-1">
+                  <ModernMediaCarousel mediaUrls={allMediaUrls} onExpand={() => setLightboxOpen(true)} />
+                </div>
+              )}
 
-                {isResolved && (
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs font-bold text-emerald-600">
-                    <CheckCircle2 size={14} /> Issue resolved
-                  </div>
-                )}
-             </div>
+              {/* Poll Variant Rendering */}
+              {post.variant === "poll" && (post as any).options && (
+                <PollBody post={post as PollPost} onVote={onVote} />
+              )}
 
-             {/* Action Bar: Vertical Sidebar (if media) or Horizontal Bar (if no media) */}
-             {hasMedia ? (
-               <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-2 p-1 rounded-2xl bg-base-200/50 border border-base-300">
-                 <ActionPill onClick={handleLike} active={liked} disabled={isResolved} vertical activeClass="bg-pink-500/10 text-pink-500">
-                   <Heart size={18} className={liked ? "fill-current" : ""} />
-                   <span>{likeCount || ""}</span>
-                 </ActionPill>
-                 <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} vertical activeClass="bg-sky-500/10 text-sky-500">
-                   <MessageSquare size={18} className={commentsOpen ? "fill-current" : ""} />
-                   <span>{post.commentCount || ""}</span>
-                 </ActionPill>
-                 <ActionPill onClick={handleShare} active={copied} vertical activeClass="bg-emerald-500/10 text-emerald-500">
-                   <Share2 size={18} />
-                   <span className="text-[9px] leading-tight mt-0.5">{copied ? "Copied" : (shareCount || "")}</span>
-                 </ActionPill>
-                 <ActionPill onClick={handleSave} active={saved} vertical activeClass="bg-amber-500/10 text-amber-500">
-                   <Bookmark size={18} className={saved ? "fill-current" : ""} />
-                 </ActionPill>
-                 {isIssue && (
-                   <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved} vertical activeClass="bg-rose-500/10 text-rose-500">
-                     <ThumbsDown size={18} className={disliked ? "fill-current" : ""} />
-                     <span>{dislikeCount || ""}</span>
-                   </ActionPill>
-                 )}
-               </motion.div>
-             ) : (
-               <div className="flex items-center gap-2 border-t border-base-300 pt-3">
-                 <ActionPill onClick={handleLike} active={liked} disabled={isResolved} activeClass="bg-pink-500/10 text-pink-500">
-                   <Heart size={16} className={liked ? "fill-current" : ""} />
-                   <span>{likeCount || "Like"}</span>
-                 </ActionPill>
-                 <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} activeClass="bg-sky-500/10 text-sky-500">
-                   <MessageSquare size={16} className={commentsOpen ? "fill-current" : ""} />
-                   <span>{post.commentCount || "Comment"}</span>
-                 </ActionPill>
-                 <ActionPill onClick={handleShare} active={copied} activeClass="bg-emerald-500/10 text-emerald-500">
-                   <Share2 size={16} />
-                   <span>{copied ? "Copied!" : (shareCount || "Share")}</span>
-                 </ActionPill>
-                 <div className="flex-1" />
-                 <ActionPill onClick={handleSave} active={saved} activeClass="bg-amber-500/10 text-amber-500">
-                   <Bookmark size={16} className={saved ? "fill-current" : ""} />
-                 </ActionPill>
-                 {isIssue && (
-                   <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved} activeClass="bg-rose-500/10 text-rose-500">
-                     <ThumbsDown size={16} className={disliked ? "fill-current" : ""} />
-                   </ActionPill>
-                 )}
-               </div>
-             )}
+              {isResolved && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs font-bold text-emerald-600">
+                  <CheckCircle2 size={14} /> Issue resolved
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar: Vertical Sidebar (if media) or Horizontal Bar (if no media) */}
+            {hasMedia ? (
+              <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-2 p-1 rounded-2xl bg-base-200/50 border border-base-300">
+                <ActionPill onClick={handleLike} active={liked} disabled={isResolved} vertical activeClass="border-pink-500 text-pink-500 bg-transparent">
+                  <Heart size={18} className={liked ? "fill-current" : ""} />
+                  <span>{likeCount || "0"}</span>
+                </ActionPill>
+                <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} vertical activeClass="border-sky-500 text-sky-500 bg-transparent">
+                  <MessageSquare size={18} className={commentsOpen ? "fill-current" : ""} />
+                  <span>{post.commentCount ?? 0}</span>
+                </ActionPill>
+                <ActionPill onClick={handleShare} active={copied} vertical activeClass="border-emerald-500 text-emerald-500 bg-transparent">
+                  <Share2 size={18} />
+                  <span className="text-[9px] leading-tight mt-0.5">{copied ? "Copied" : (shareCount || "0")}</span>
+                </ActionPill>
+                <ActionPill onClick={handleSave} active={saved} vertical activeClass="border-amber-500 text-amber-500 bg-transparent">
+                  <Bookmark size={18} className={saved ? "fill-current" : ""} />
+                </ActionPill>
+                {isIssue && (
+                  <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved} vertical activeClass="border-rose-500 text-rose-500 bg-transparent">
+                    <ThumbsDown size={18} className={disliked ? "fill-current" : ""} />
+                    <span>{dislikeCount || "0"}</span>
+                  </ActionPill>
+                )}
+              </motion.div>
+            ) : (
+              <div className="flex items-center gap-2 border-t border-base-300 pt-3">
+                <ActionPill onClick={handleLike} active={liked} disabled={isResolved} activeClass="border-pink-500 text-pink-500 bg-transparent">
+                  <Heart size={16} className={liked ? "fill-current" : ""} />
+                  <span>{likeCount || "0"}</span>
+                </ActionPill>
+                <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} activeClass="border-sky-500 text-sky-500 bg-transparent">
+                  <MessageSquare size={16} className={commentsOpen ? "fill-current" : ""} />
+                  <span>{post.commentCount ?? 0}</span>
+                </ActionPill>
+                <ActionPill onClick={handleShare} active={copied} activeClass="border-emerald-500 text-emerald-500 bg-transparent">
+                  <Share2 size={16} />
+                  <span>{copied ? "Copied!" : (shareCount || "0")}</span>
+                </ActionPill>
+                <div className="flex-1" />
+                <ActionPill onClick={handleSave} active={saved} activeClass="border-amber-500 text-amber-500 bg-transparent">
+                  <Bookmark size={16} className={saved ? "fill-current" : ""} />
+                </ActionPill>
+                {isIssue && (
+                  <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved} activeClass="bg-rose-500/10 text-rose-500">
+                    <ThumbsDown size={16} className={disliked ? "fill-current" : ""} />
+                  </ActionPill>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Comments section */}
@@ -1244,7 +1266,7 @@ export default function PostCard({
             >
               <ModernMediaCarousel
                 mediaUrls={allMediaUrls}
-                onExpand={() => {}}
+                onExpand={() => { }}
               />
             </motion.div>
           </motion.div>

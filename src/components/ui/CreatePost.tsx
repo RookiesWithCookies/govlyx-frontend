@@ -148,31 +148,6 @@ async function apiCreatePoll(payload: {
   return { ok: true, message: json?.message, data: json?.data ?? null };
 }
 
-/**
- * Poll Post WITH media — POST /api/polls/create/with-media (multipart)
- */
-async function apiCreatePollWithMedia(payload: {
-  question: string;
-  options: string[];
-  expiresIn: string;
-  allowMultipleVotes: boolean;
-  showResultsBeforeExpiry?: boolean;
-}, mediaFile: File): Promise<ApiResult> {
-  const form = new FormData();
-  form.append(
-    "poll",
-    new Blob([JSON.stringify(payload)], { type: "application/json" })
-  );
-  form.append("media", mediaFile);
-  const res = await fetch(`/api/polls/create/with-media`, {
-    method: "POST",
-    headers: { ...authHeaders() },
-    body: form,
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, message: json?.message ?? `HTTP ${res.status}` };
-  return { ok: true, message: json?.message, data: json?.data ?? null };
-}
 
 // ─── MEDIA UPLOAD ZONE ────────────────────────────────────────────────────────
 function MediaUploadZone({
@@ -638,8 +613,6 @@ function PollForm({
   const [apiError, setApiError] = useState<string | null>(null);
   const [allowMultipleVotes, setAllowMultipleVotes] = useState(false);
   const [expiresIn, setExpiresIn] = useState("1d");
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
 
   // ── Suggestions ──
   const [mentionSearch, setMentionSearch] = useState(false);
@@ -674,12 +647,7 @@ function PollForm({
         showResultsBeforeExpiry: true,
         communityId,
       };
-      let result: ApiResult;
-      if (mediaFiles.length > 0) {
-        result = await apiCreatePollWithMedia(payload, mediaFiles[0]);
-      } else {
-        result = await apiCreatePoll(payload);
-      }
+      const result = await apiCreatePoll(payload);
       if (!result.ok) {
         setApiError(result.message ?? "Failed to create poll. Please try again.");
         return;
@@ -696,16 +664,6 @@ function PollForm({
     }
   };
 
-  // Update media preview when file changes
-  const handleMediaChange = (files: File[]) => {
-    setMediaFiles(files);
-    if (files.length > 0) {
-      const url = URL.createObjectURL(files[0]);
-      setMediaPreview(url);
-    } else {
-      setMediaPreview(null);
-    }
-  };
 
   const handleQuestionChange = (val: string) => {
     setPollQuestion(val);
@@ -779,7 +737,7 @@ function PollForm({
         <p className="text-sm text-base-content/50">Your poll is now live in the community feed.</p>
         <button
           className="btn btn-sm bg-[#1D4ED8] text-white"
-          onClick={() => { setSubmitted(false); setPollQuestion(""); setOptions(["", ""]); setApiError(null); setMediaFiles([]); setMediaPreview(null); }}
+          onClick={() => { setSubmitted(false); setPollQuestion(""); setOptions(["", ""]); setApiError(null); }}
         >Post Another</button>
       </div>
     );
@@ -797,10 +755,10 @@ function PollForm({
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="relative">
+      <div className="relative group">
         <textarea
           ref={textareaRef}
-          className={`textarea textarea-bordered w-full min-h-[80px] focus:border-[#1D4ED8] ${errors.pollQuestion ? "border-red-500" : ""}`}
+          className={`textarea textarea-bordered w-full min-h-[90px] bg-base-300/30 border-base-content/10 focus:border-[#1D4ED8] focus:bg-base-100 transition-all duration-200 resize-none text-sm font-medium ${errors.pollQuestion ? "border-red-500/50" : ""}`}
           placeholder="Ask your poll question..."
           value={pollQuestion}
           onChange={(e) => handleQuestionChange(e.target.value)}
@@ -854,85 +812,81 @@ function PollForm({
           )}
         </AnimatePresence>
       </div>
-      {options.map((opt, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <input
-            type="text"
-            className="input input-bordered flex-1 input-sm focus:border-[#1D4ED8]"
-            placeholder={`Option ${i + 1}`}
-            value={opt}
-            onChange={(e) => updateOption(i, e.target.value)}
-          />
-          {options.length > 2 && (
-            <button className="btn btn-ghost btn-xs text-error" onClick={() => removeOption(i)}><X size={12} /></button>
-          )}
-        </div>
-      ))}
-
-      <button
-        className="btn btn-ghost btn-sm w-full border border-dashed border-base-content/40 hover:border-[#1D4ED8] hover:text-[#1D4ED8] rounded-xl transition-colors"
-        onClick={addOption}
-        disabled={options.length >= 4}
-      >
-        + Add Option {options.length < 4 ? `(${4 - options.length} remaining)` : "(Max 4)"}
-      </button>
-
-      {/* Poll Cover Media */}
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1 text-base-content/70">
-          <ImagePlus size={14} className="text-[#1D4ED8]" /> Poll Cover Media <span className="text-base-content/40 font-normal normal-case tracking-normal ml-1">(optional)</span>
-        </p>
-        {mediaPreview ? (
-          <div className="relative rounded-2xl overflow-hidden border border-[#1D4ED8]/20">
-            {mediaFiles[0]?.type.startsWith("video") ? (
-              <video src={mediaPreview} className="w-full max-h-44 object-cover" controls />
-            ) : (
-              <img src={mediaPreview} className="w-full max-h-44 object-cover" alt="Poll cover" />
-            )}
-            <button
-              onClick={() => handleMediaChange([])}
-              className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-            >
-              <X size={14} />
-            </button>
-            <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full bg-[#1D4ED8] text-white text-[10px] font-bold uppercase tracking-widest">
-              Cover
+      <div className="space-y-2.5">
+        {options.map((opt, i) => (
+          <div key={i} className="flex items-center gap-3 group/opt animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex-1 relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-base-content/30 uppercase tracking-widest hidden sm:block">
+                Choice {i + 1}
+              </span>
+              <input
+                type="text"
+                className={`input input-bordered w-full h-[42px] transition-all duration-200 focus:border-[#1D4ED8] bg-base-300/30 sm:pl-20 ${errors[`opt${i}`] ? "border-red-500/50" : "border-base-content/5"}`}
+                placeholder={`Option ${i + 1}`}
+                value={opt}
+                onChange={(e) => updateOption(i, e.target.value)}
+              />
             </div>
+            {options.length > 2 && (
+              <button 
+                className="btn btn-ghost btn-xs w-8 h-8 rounded-full text-base-content/30 hover:text-red-400 hover:bg-red-400/10 transition-all flex-shrink-0" 
+                onClick={() => removeOption(i)}
+                title="Remove option"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
-        ) : (
-          <MediaUploadZone accent="blue" files={mediaFiles} onChange={handleMediaChange} />
-        )}
+        ))}
       </div>
 
-      <div className="flex items-center justify-between gap-4 bg-base-300 p-3 rounded-xl border border-base-content/15">
-        <span className="text-xs font-bold text-base-content/80 uppercase tracking-wider ml-1">Poll Duration</span>
-        <select
-          className="select select-sm select-bordered focus:border-[#1D4ED8] font-semibold h-8 min-h-0 bg-base-100"
-          value={expiresIn}
-          onChange={(e) => setExpiresIn(e.target.value)}
+      {options.length < 4 && (
+        <button
+          className="btn btn-ghost btn-sm w-full font-bold text-[11px] uppercase tracking-widest text-[#1D4ED8] hover:bg-[#1D4ED8]/5 border-none h-10 min-h-0 transition-all rounded-xl"
+          onClick={addOption}
         >
-          <option value="1h">1 Hour</option>
-          <option value="1d">1 Day</option>
-          <option value="3d">3 Days</option>
-          <option value="7d">7 Days</option>
-        </select>
-      </div>
+          + Add Option ({4 - options.length} remaining)
+        </button>
+      )}
 
-      <div className="flex flex-col gap-2 p-1">
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <div
-            className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${allowMultipleVotes ? "bg-[#1D4ED8]" : "bg-base-content/20"}`}
-            onClick={() => setAllowMultipleVotes(!allowMultipleVotes)}
+
+      <div className="flex flex-col sm:flex-row items-center gap-3 bg-base-300/50 p-2.5 rounded-xl border border-base-content/5 mt-1">
+        <div className="flex-1 flex items-center justify-between gap-4 px-2 w-full sm:w-auto">
+          <span className="text-[10px] font-bold text-base-content/60 uppercase tracking-widest">Duration</span>
+          <select
+            className="select select-xs select-bordered focus:border-[#1D4ED8] font-bold bg-base-100 h-8 min-h-0 rounded-lg text-[11px]"
+            value={expiresIn}
+            onChange={(e) => setExpiresIn(e.target.value)}
           >
-            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${allowMultipleVotes ? "translate-x-5" : "translate-x-1"}`} />
-          </div>
-          <span className="text-xs font-semibold text-base-content/60 group-hover:text-base-content transition-colors">Allow multiple votes</span>
-        </label>
+            <option value="1h">1 Hour</option>
+            <option value="1d">1 Day</option>
+            <option value="3d">3 Days</option>
+            <option value="7d">7 Days</option>
+          </select>
+        </div>
+
+        <div className="w-px h-6 bg-base-content/10 hidden sm:block" />
+
+        <div className="flex-1 flex items-center justify-between gap-4 px-2 w-full sm:w-auto">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <span className="text-[10px] font-bold text-base-content/60 uppercase tracking-widest group-hover:text-base-content transition-colors">Multiple Votes</span>
+            <div
+              className={`relative w-8 h-4.5 rounded-full transition-colors duration-200 border border-base-content/10 ${allowMultipleVotes ? "bg-[#1D4ED8] border-[#1D4ED8]" : "bg-base-200"}`}
+              onClick={() => setAllowMultipleVotes(!allowMultipleVotes)}
+            >
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${allowMultipleVotes ? "translate-x-4" : "translate-x-0.5"}`} />
+            </div>
+          </label>
+        </div>
       </div>
 
-      <div className="flex justify-end pt-1">
-        <button className="btn btn-sm bg-[#1D4ED8] text-white min-w-[100px] rounded-xl" onClick={handlePost} disabled={loading}>
-          {loading ? <><Loader2 size={13} className="animate-spin" /> Posting...</> : "Post Poll"}
+      <div className="flex justify-end pt-2">
+        <button 
+          className="btn btn-sm bg-[#1D4ED8] text-white min-w-[120px] rounded-xl font-bold shadow-lg shadow-[#1D4ED8]/20 hover:bg-[#1D4ED8]/90 h-10 border-none" 
+          onClick={handlePost} 
+          disabled={loading}
+        >
+          {loading ? <><Loader2 size={14} className="animate-spin" /> Publishing...</> : "Publish Poll"}
         </button>
       </div>
     </div>

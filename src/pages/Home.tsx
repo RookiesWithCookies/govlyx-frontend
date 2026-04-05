@@ -6,9 +6,8 @@ import type { AnyPost } from "../components/post/PostCard";
 import EmptyState from "../components/ui/EmptyState";
 import PostSkeleton from "../components/post/PostSkeleton";
 import axiosInstance from "../api/axiosConfig";
-
-
 import { toPostCardPost } from "../utils/postUtils";
+import { postService } from "../api/postService";
 
 
 const FEED_SIZE = 20;
@@ -181,6 +180,18 @@ const Home = () => {
     window.location.href = `/post/${postId}`;
   }, []);
 
+  const handleVote = useCallback(async (pollId: number, optionIds: number[]) => {
+    try {
+      await postService.voteInPoll(pollId, optionIds);
+      const post = posts.find(p => p.variant === 'poll' && p.pollId === pollId);
+      if (post) {
+        updatePost(post.id, { userHasVoted: true, votedOptionIds: optionIds } as any);
+      }
+    } catch (err) {
+      console.error("Vote error:", err);
+    }
+  }, [posts, updatePost]);
+
   const handleDelete = useCallback(async (postId: number) => {
     if (!window.confirm("Are you sure you want to delete this post?")) return;
     const post = posts.find(p => p.id === postId);
@@ -314,6 +325,7 @@ const Home = () => {
                 onSave={handleSave}
                 onShare={handleShare}
                 onComment={handleComment}
+                onVote={handleVote}
                 onDelete={handleDelete}
               />
             </div>

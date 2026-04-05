@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FiSearch } from "react-icons/fi";
-import { HiOutlineArrowRight, HiOutlineArrowLeft } from "react-icons/hi";
+import { HiOutlineArrowRight } from "react-icons/hi";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Building2, Construction, GraduationCap, Stethoscope, Leaf,
@@ -23,6 +23,7 @@ import PostCard from "../components/post/PostCard";
 import PostSkeleton from "../components/post/PostSkeleton";
 import type { CurrentUser as CardUser, CommunityPost } from "../components/post/PostCard";
 import { jwtDecode } from "jwt-decode";
+import { postService } from "../api/postService";
 
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1662,10 +1663,12 @@ function DetailPanel({
   community,
   onClose,
   onMembershipChange,
+  myCommunities,
 }: {
   community: CommunityData;
   onClose: () => void;
   onMembershipChange: (id: number, isMember: boolean, delta: number, hasPendingRequest?: boolean) => void;
+  myCommunities: CommunityData[];
 }) {
   const normalise = (raw: CommunityData): CommunityData =>
     raw.isOwner ? { ...raw, isMember: true } : raw;
@@ -1711,7 +1714,7 @@ function DetailPanel({
           const backendPending = detail.hasPendingRequest === true || detail.pendingRequest === true || detail.hasPendingRequest === "true" || detail.pendingRequest === "true";
           const communityId = detail.id ?? community.id;
           const localPending = getPendingLocal().includes(String(communityId));
-          const local = myCommunities.find(x => x.id === communityId);
+          const local = (myCommunities as CommunityData[]).find((x: CommunityData) => x.id === communityId);
           const finalIsOwner = detail.isOwner === true || detail.owner === true || detail.isOwner === "true" || detail.owner === "true" || !!local?.isOwner;
 
           if (fetchedMember || finalIsOwner) removePendingLocal(communityId);
@@ -1729,7 +1732,7 @@ function DetailPanel({
       } catch { }
     })();
     return () => { active = false; };
-  }, [community.slug]);
+  }, [community.slug, myCommunities]);
 
   const loadPosts = useCallback(async (cur: number | null, score: number | null, replace: boolean) => {
     const canView = c.isMember || c.isOwner || c.privacy === "PUBLIC";
@@ -1853,7 +1856,6 @@ function DetailPanel({
                         setC((prev) => ({ ...prev, postCount: prev.postCount + 1 }));
                       }}
                     />
-
                     <div className="flex items-center justify-between border-b border-base-300 pb-2">
                       <span className="text-sm font-semibold opacity-80">Feed</span>
                       <div className="flex bg-base-200 rounded-lg p-0.5 border border-base-300">
@@ -1917,6 +1919,20 @@ function DetailPanel({
                           key={post.id}
                           post={cardPost}
                           currentUser={currentUser || undefined}
+                          onVote={async (_pollId, ids) => {
+                            try {
+                              // We use the post.id for matching in communities as pollId might be nested differently
+                              await postService.voteInPoll(_pollId, ids);
+                              setPosts(prev => prev.map(p => {
+                                if (p.id === post.id) {
+                                   return { ...p, userHasVoted: true, votedOptionIds: ids } as any;
+                                }
+                                return p;
+                              }));
+                            } catch (err) {
+                              console.error("Community vote error:", err);
+                            }
+                          }}
                           hideCommunityStrip={true}
                         />
 
@@ -2248,13 +2264,14 @@ const Community = () => {
           {!searchLoading && searchResults.length > 0 && (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
               {searchResults.map((c: any) => {
-                const local = myCommunities.find(x => x.id === c.id);
+                const local = myCommunities.find((x: CommunityData) => x.id === c.id);
                 return (
-                  <CommunityCard key={c.id} id={c.id} slug={c.slug} name={c.name} description={c.description}
-                    members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy}
+                  <CommunityCard key={c.id} id={Number(c.id)} name={String(c.name)} description={String(c.description)}
+                    members={Number(c.memberCount) || 0} avatarUrl={c.avatarUrl} privacy={String(c.privacy)}
                     isMember={!!local?.isMember} isOwner={!!local?.isOwner} hasPendingRequest={!!local?.hasPendingRequest}
                     onClick={() => {
-                      setSelected(local ? { ...c, isMember: local.isMember, isOwner: local.isOwner, hasPendingRequest: local.hasPendingRequest } : c);
+                        const sel: any = local ? { ...c, isMember: local.isMember, isOwner: local.isOwner, hasPendingRequest: local.hasPendingRequest } : c;
+                        setSelected(sel);
                     }} />
                 );
               })}
@@ -2363,8 +2380,8 @@ const Community = () => {
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-widest opacity-40">✓ Joined · {joinedOnly.length}</p>
                   <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                    {joinedOnly.map(c => (
-                      <CommunityCard key={c.id} id={c.id} slug={c.slug} name={c.name} description={c.description}
+                    {joinedOnly.map((c: any) => (
+                      <CommunityCard key={c.id} id={c.id} name={c.name} description={c.description}
                         members={c.memberCount} avatarUrl={c.avatarUrl} privacy={c.privacy} onClick={() => setSelected(c)} />
                     ))}
                   </div>
@@ -2384,7 +2401,7 @@ const Community = () => {
       )}
 
       {selected && !adminTarget && (
-        <DetailPanel community={selected} onClose={() => setSelected(null)} onMembershipChange={syncMembership} />
+        <DetailPanel community={selected} onClose={() => setSelected(null)} onMembershipChange={syncMembership} myCommunities={myCommunities} />
       )}
 
       {adminTarget && (

@@ -10,7 +10,6 @@ import {
   Trash2,
   Pencil,
   ChevronDown,
-  X,
   Loader2,
   MessageSquare,
   SmilePlus,
@@ -480,7 +479,7 @@ function SingleComment({
               {/* Comment bubble with Glassmorphism */}
               <div className="inline-block max-w-[95%] rounded-2xl rounded-tl-sm bg-base-200/50 backdrop-blur-sm border border-base-content/5 px-4 py-3 shadow-sm hover:bg-base-200/80 transition-colors">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold text-primary/90 tracking-tight">{authorName}</span>
+                  <span className="text-xs font-bold text-primary tracking-tight">{authorName}</span>
                   {comment.author?.username === "admin" && (
                     <span className="bg-[#1D4ED8]/10 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded-full">STAFF</span>
                   )}

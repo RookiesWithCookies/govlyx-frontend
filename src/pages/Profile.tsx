@@ -11,6 +11,7 @@ import PostSkeleton from "../components/post/PostSkeleton";
 import type { AnyPost, CurrentUser } from "../components/post/PostCard";
 import { useCurrentUser } from "../hooks/useUser";
 import { toPostCardPost } from "../utils/postUtils";
+import { postService } from "../api/postService";
 
 // ─── auth helpers ─────────────────────────────────────────────────────────────
 function authHeaders(): HeadersInit {
@@ -115,6 +116,26 @@ const Profile = () => {
       alert("Failed to delete content. Please try again later.");
     }
   }
+
+  const handleVote = async (pollId: number, optionIds: number[]) => {
+    try {
+      await postService.voteInPoll(pollId, optionIds);
+      const updater = (prev: AnyPost[]) =>
+        prev.map(p => {
+          if (p.variant === 'poll' && (p as any).pollId === pollId) {
+            return { ...p, userHasVoted: true, votedOptionIds: optionIds };
+          }
+          return p;
+        });
+      setAllPosts(updater);
+      setActivePosts(updater);
+      setResolvedPosts(updater);
+      setSocialPosts(updater);
+      setActivity(updater);
+    } catch (err) {
+      console.error("Profile vote error:", err);
+    }
+  };
 
   const [username, setUsername] = useState<string>("...");
   const [memberSince, setMemberSince] = useState("");
@@ -431,6 +452,7 @@ const Profile = () => {
                 key={p.id}
                 post={p}
                 currentUser={currentUser}
+                onVote={handleVote}
                 onDelete={(id) => handleDelete('posts', id)}
               />
             ))
@@ -458,6 +480,7 @@ const Profile = () => {
                 key={p.id}
                 post={p}
                 currentUser={currentUser}
+                onVote={handleVote}
                 onDelete={(id) => handleDelete('social-posts', id)}
               />
             ))
@@ -485,6 +508,7 @@ const Profile = () => {
                 key={`${post.id}-${post.variant}`}
                 post={post}
                 currentUser={currentUser}
+                onVote={handleVote}
               />
             ))
           )}

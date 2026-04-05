@@ -8,7 +8,7 @@ type Props = {
   active: ScopeTab;
 };
 
-const FeedFilterBar = ({ active }: Props) => {
+const FeedFilterBar = ({ active: _active }: Props) => {
   const [sort, setSort] = useState<SortTab>("hot");
   const [change,setChange] = useState<ScopeTab>("all");
 

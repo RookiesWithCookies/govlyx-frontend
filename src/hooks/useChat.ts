@@ -188,14 +188,14 @@ export function useChat(): UseChatReturn {
 
   onMessageRef.current = (msg: ChatMessageDto) => {
     if (msg.messageType === "USER_LEFT" || msg.messageType === "CHAT_ENDED") {
-      setMessages((prev) => mergeMessages(prev, [msg]));
+      setMessages((prev: ChatMessageDto[]) => mergeMessages(prev, [msg]));
       setStatus("PARTNER_LEFT");
       sessionStore.clear(); // ← NEW
       chatSocket.disconnect();
       _stopPolling();
       return;
     }
-    setMessages((prev) => mergeMessages(prev, [msg]));
+    setMessages((prev: ChatMessageDto[]) => mergeMessages(prev, [msg]));
   };
 
   onTypingRef.current = (_n: TypingNotification) => {
@@ -217,7 +217,7 @@ export function useChat(): UseChatReturn {
     }
     // BUG 4 FIX: update session when a fresh match event arrives (e.g. after reconnect)
     if (n.sessionId && n.yourAnonymousId) {
-      setSession((prev) => {
+      setSession((prev: ChatSessionDto | null) => {
         if (!prev) return prev;
         return {
           ...prev,

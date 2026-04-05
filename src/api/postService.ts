@@ -30,5 +30,12 @@ export const postService = {
   getPostById: async (postId: number, postType: "posts" | "social-posts") => {
     const response = await axiosInstance.get(`/api/${postType}/${postId}`);
     return response.data;
-  }
+  },
+
+  voteInPoll: async (pollId: number, optionIds: number[]) => {
+    const response = await axiosInstance.post(`/api/polls/${pollId}/vote`, {
+      optionIds,
+    });
+    return response.data;
+  },
 };
