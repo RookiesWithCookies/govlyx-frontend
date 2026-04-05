@@ -7,7 +7,7 @@ import type {
   ChatMessageDto,
   MatchNotification,
   TypingNotification,
-} from "../types/chat.types";
+} from "../types/Chat.types";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 function getToken(): string | null {

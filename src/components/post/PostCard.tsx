@@ -1042,11 +1042,9 @@ export default function PostCard({
                 <AuthorRow
                   post={post}
                   badge={isCommunity ? (post as CommunityPost).authorRole : undefined}
-                  communityName={isCommunityPost(post) ? ((post as any).communityName || "Community") : undefined}
                   onDelete={handleDelete}
                   isDeleting={isDeleting}
                   showDelete={!!(post as any).canDelete || post.username === currentUser?.username}
-                  rightAction={null}
                 />
               )}
           </div>

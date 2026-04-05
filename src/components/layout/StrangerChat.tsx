@@ -4,7 +4,7 @@ import { Dices, Zap, Search, AlertTriangle, Plus, Image as ImageIcon, Video, X, 
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useChat } from "../../hooks/useChat";
 import { sendMedia } from "../../api/chatApi.service";
-import type { ChatMessageDto, ChatStatus, MessageType } from "../../types/chat.types";
+import type { ChatMessageDto, ChatStatus, MessageType } from "../../types/Chat.types";
 
 // ── Icons & Config ──────────────────────────────────────────────────────────
 

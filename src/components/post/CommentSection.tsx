@@ -16,7 +16,7 @@ import {
   SmilePlus,
   Sparkles,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 
 // ─── auth helpers ─────────────────────────────────────────────────────────────
 function authHeaders(): HeadersInit {
@@ -88,11 +88,7 @@ export type CommentDto = {
   replies?: CommentDto[];
 };
 
-type PaginatedResponse<T> = {
-  content: T[];
-  hasMore: boolean;
-  nextCursor?: number;
-};
+// Unused PaginatedResponse removed to fix lint error
 
 type CommentSectionProps = {
   postId: number;
@@ -137,7 +133,7 @@ const LIMIT = 10;
 // ═══════════════════════════════════════════════════════════════════════════════
 // Variants for animations
 // ═══════════════════════════════════════════════════════════════════════════════
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -147,7 +143,7 @@ const containerVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10, scale: 0.98 },
   visible: {
     opacity: 1,
@@ -172,6 +168,7 @@ function AutoTextarea({
   placeholder,
   disabled,
   autoFocus,
+  onFocus,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -179,6 +176,7 @@ function AutoTextarea({
   placeholder: string;
   disabled?: boolean;
   autoFocus?: boolean;
+  onFocus?: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -202,6 +200,7 @@ function AutoTextarea({
       onKeyDown={onKeyDown}
       placeholder={placeholder}
       disabled={disabled}
+      onFocus={onFocus}
       className="w-full resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-base-content/40 disabled:opacity-50"
       style={{ minHeight: "24px", maxHeight: "200px" }}
     />

@@ -16,7 +16,7 @@ import type {
   ChatMessageDto,
   ChatSessionDto,
   SearchResponseData,
-} from "../types/chat.types";
+} from "../types/Chat.types";
 
 // ── Custom error classes ──────────────────────────────────────────────────────
 

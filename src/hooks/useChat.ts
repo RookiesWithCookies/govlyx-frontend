@@ -44,7 +44,7 @@ import type {
   ChatStatus,
   MatchNotification,
   TypingNotification,
-} from "../types/chat.types";
+} from "../types/Chat.types";
 
 const POLL_MS            = 2_500;
 const TYPING_RESET_MS    = 2_500;
