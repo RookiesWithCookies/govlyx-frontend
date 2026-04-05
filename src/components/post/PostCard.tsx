@@ -1,0 +1,1257 @@
+import { useState, useEffect, useRef } from "react";
+import {
+  ThumbsDown,
+  Heart,
+  MessageSquare,
+  Share2,
+  Bookmark,
+  BadgeCheck,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Users,
+  Globe,
+  Building2,
+  AlertCircle,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ImageIcon,
+  UserPlus,
+  Play,
+  Volume2,
+  VolumeX,
+  Check,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import CommentSection from "./CommentSection";
+import type { PostType } from "./CommentSection";
+import { resolveMediaUrl } from "../../utils/postUtils";
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+async function apiFetch(url: string, method: string, body?: unknown): Promise<unknown> {
+  const token = localStorage.getItem("authToken") ?? localStorage.getItem("token");
+  const res = await fetch(url, {
+    method,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (res.status === 204) return null;
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json().catch(() => null);
+}
+
+const apiPost = (url: string, body: unknown) => apiFetch(url, "POST", body);
+const apiPut = (url: string, body?: unknown) => apiFetch(url, "PUT", body);
+
+async function recordShare(postType: "posts" | "social-posts", id: number) {
+  const url = `${window.location.origin}/${postType}/${id}`;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    window.prompt("Copy link:", url);
+  }
+  apiPost(`/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`, {}).catch(() => {});
+}
+
+function useCopied() {
+  const [copied, setCopied] = useState(false);
+  function flash() {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }
+  return { copied, flash };
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+export type PostVariant = "issue" | "social" | "community" | "government" | "poll";
+export type PostStatus = "ACTIVE" | "RESOLVED" | "DELETED" | "FLAGGED";
+export type BroadcastScope = "AREA" | "DISTRICT" | "STATE" | "COUNTRY";
+
+export type CurrentUser = {
+  id: number;
+  role: "ROLE_USER" | "ROLE_DEPARTMENT" | "ROLE_ADMIN";
+  taggedUsernames?: string[];
+  username: string;
+};
+
+type BasePost = {
+  id: number;
+  content: string;
+  timeAgo?: string;
+  username: string;
+  userDisplayName?: string;
+  userProfileImage?: string;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+};
+
+export type IssuePost = BasePost & {
+  variant: "issue";
+  status: PostStatus;
+  broadcastScope?: BroadcastScope;
+  broadcastScopeDescription?: string;
+  targetPincodes?: string[];
+  isResolved: boolean;
+  resolvedAt?: string;
+  canBeResolved?: boolean;
+  dislikeCount: number;
+  viewCount: number;
+  taggedUsernames: string[];
+  imageName?: string;
+  hasImage?: boolean;
+  isLikedByCurrentUser?: boolean;
+  isDislikedByCurrentUser?: boolean;
+  isSaved?: boolean;
+};
+
+export type SocialPost = BasePost & {
+  variant: "social";
+  isSaved?: boolean;
+  isSavedByCurrentUser?: boolean;
+  hashtags?: string[];
+  mediaUrls?: string[];
+  communityId?: number | null;
+  isLikedByCurrentUser?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  isPoll?: boolean;
+  pollId?: number;
+};
+
+export type CommunityPost = BasePost & {
+  variant: "community";
+  communityId: number;
+  communityName: string;
+  communityAvatar?: string;
+  communityMemberCount?: string;
+  isMember?: boolean;
+  authorRole?: string;
+  isSaved?: boolean;
+  isSavedByCurrentUser?: boolean;
+  hashtags?: string[];
+  mediaUrls?: string[];
+  isLikedByCurrentUser?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+};
+
+export type GovernmentPost = BasePost & {
+  variant: "government";
+  department: string;
+  isSaved?: boolean;
+  isSavedByCurrentUser?: boolean;
+  broadcastScope?: BroadcastScope;
+  broadcastScopeDescription?: string;
+  isGovernmentBroadcast: true;
+  isLikedByCurrentUser?: boolean;
+};
+
+export type PollOption = {
+  id: number;
+  optionText: string;
+  voteCount: number;
+  percentage: number;
+};
+
+export type PollPost = BasePost & {
+  variant: "poll";
+  pollId: number;
+  question: string;
+  options: PollOption[];
+  totalVotes: number;
+  allowMultipleVotes: boolean;
+  isExpired: boolean;
+  expiresAt?: string;
+  timeLeft?: string;
+  userHasVoted: boolean;
+  votedOptionIds: number[];
+  showResults: boolean;
+  isSaved?: boolean;
+  communityId?: number;
+  communityName?: string;
+  communityAvatar?: string;
+  communityMemberCount?: string;
+  isMember?: boolean;
+  authorRole?: string;
+  isLikedByCurrentUser?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+};
+
+export type AnyPost = IssuePost | SocialPost | CommunityPost | GovernmentPost | PollPost;
+
+type PostCardProps = {
+  post: AnyPost;
+  currentUser?: CurrentUser;
+  onLike?: (postId: number, liked: boolean) => void;
+  onSave?: (postId: number, saved: boolean) => void;
+  onShare?: (postId: number) => void;
+  onComment?: (postId: number) => void;
+  onResolve?: (postId: number, isResolved: boolean, message: string) => void;
+  onVote?: (pollId: number, optionIds: number[]) => void;
+  onDelete?: (postId: number) => void;
+  hideCommunityStrip?: boolean;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function scopeIcon(scope?: BroadcastScope) {
+  return scope === "STATE" || scope === "COUNTRY" ? <Globe size={11} /> : <MapPin size={11} />;
+}
+
+function scopeLabel(scope?: BroadcastScope, desc?: string) {
+  if (desc) return desc;
+  const map: Record<string, string> = {
+    AREA: "Area",
+    DISTRICT: "District",
+    STATE: "State",
+    COUNTRY: "National",
+  };
+  return scope ? map[scope] ?? "Local" : "Local";
+}
+
+function canUpdateResolution(post: IssuePost, currentUser?: CurrentUser): boolean {
+  if (!currentUser) return false;
+  if (currentUser.role === "ROLE_ADMIN") return true;
+  if (currentUser.role === "ROLE_DEPARTMENT")
+    return post.taggedUsernames?.includes(currentUser.username) ?? false;
+  return false;
+}
+
+function commentPostType(variant: PostVariant): PostType {
+  return variant === "issue" ? "post" : "social-posts";
+}
+
+function isCommunityPost(post: AnyPost): boolean {
+  if (post.variant === "community") return true;
+  if (post.variant === "poll" && !!(post as PollPost).communityId) return true;
+  if (post.variant === "social" && !!(post as SocialPost).communityId) return true;
+  return false;
+}
+
+function getCommunityId(post: AnyPost): number | null {
+  if (post.variant === "community") return (post as CommunityPost).communityId;
+  if (post.variant === "poll") return (post as PollPost).communityId ?? null;
+  if (post.variant === "social") return (post as SocialPost).communityId ?? null;
+  return null;
+}
+
+// ─── Modern Carousel Component ───────────────────────────────────────────────
+function ModernMediaCarousel({
+  mediaUrls,
+  onExpand,
+}: {
+  mediaUrls: string[];
+  onExpand: () => void;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [imgError, setImgError] = useState<Record<number, boolean>>({});
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(url);
+  const currentMedia = mediaUrls[activeIndex];
+  const isCurrentVideo = isVideoUrl(currentMedia);
+
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveIndex((i) => (i === 0 ? mediaUrls.length - 1 : i - 1));
+  };
+
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveIndex((i) => (i === mediaUrls.length - 1 ? 0 : i + 1));
+  };
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play();
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!isCurrentVideo) setIsPlaying(false);
+  }, [activeIndex, isCurrentVideo]);
+
+  return (
+    <div className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 shadow-2xl group">
+      <motion.div
+        className="relative h-64 sm:h-80 w-full bg-black/50 flex items-center justify-center cursor-pointer"
+        onClick={isCurrentVideo ? togglePlay : onExpand}
+        transition={{ duration: 0.3 }}
+      >
+        <AnimatePresence mode="wait">
+          {!imgError[activeIndex] ? (
+            isCurrentVideo ? (
+              <motion.video
+                key={`video-${activeIndex}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                ref={videoRef}
+                src={currentMedia}
+                controls={isPlaying}
+                muted={isMuted}
+                loop
+                playsInline
+                className="h-full w-full object-contain"
+                onClick={togglePlay}
+                onError={() =>
+                  setImgError((prev) => ({ ...prev, [activeIndex]: true }))
+                }
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+              />
+            ) : (
+              <motion.img
+                key={`img-${activeIndex}`}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.3 }}
+                src={currentMedia}
+                alt={`Media ${activeIndex + 1}`}
+                className="h-full w-full object-cover"
+                onError={() =>
+                  setImgError((prev) => ({ ...prev, [activeIndex]: true }))
+                }
+              />
+            )
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center h-full w-full bg-slate-800/50"
+            >
+              <div className="w-12 h-12 rounded-full bg-slate-700/50 flex items-center justify-center mb-3 mb-2">
+                <ImageIcon size={24} className="stroke-slate-400" />
+              </div>
+              <p className="text-xs font-medium text-slate-400 px-6 text-center">
+                Legacy media unavailable
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Play Icon Overlay for Videos */}
+        <AnimatePresence>
+          {isCurrentVideo && !isPlaying && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+            >
+              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-2xl">
+                <Play size={32} className="text-white fill-white ml-1" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+      </motion.div>
+
+      {/* Navigation arrows */}
+      {mediaUrls.length > 1 && (
+        <>
+          <motion.button
+            onClick={handlePrev}
+            whileHover={{ scale: 1.1, x: -4 }}
+            whileTap={{ scale: 0.95 }}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 transition-all z-20 text-white shadow-lg"
+          >
+            <ChevronLeft size={18} />
+          </motion.button>
+          <motion.button
+            onClick={handleNext}
+            whileHover={{ scale: 1.1, x: 4 }}
+            whileTap={{ scale: 0.95 }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 transition-all z-20 text-white shadow-lg"
+          >
+            <ChevronRight size={18} />
+          </motion.button>
+        </>
+      )}
+
+      {/* Indicator dots */}
+      {mediaUrls.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+          {mediaUrls.map((_, i) => (
+            <motion.button
+              key={i}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex(i);
+              }}
+              whileTap={{ scale: 0.8 }}
+              className={`rounded-full transition-all duration-300 ${
+                i === activeIndex
+                  ? "w-6 h-2 bg-white shadow-lg"
+                  : "w-2 h-2 bg-white/50 hover:bg-white/80"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Counter & Video controls */}
+      <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
+        {isCurrentVideo && (
+          <motion.button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMuted(!isMuted);
+            }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 flex items-center justify-center text-white transition-all"
+          >
+            {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </motion.button>
+        )}
+        {mediaUrls.length > 1 && (
+          <div className="rounded-full bg-black/40 backdrop-blur-sm px-3 py-1.5 text-xs text-white font-semibold font-mono">
+            {activeIndex + 1}/{mediaUrls.length}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Community Strip ─────────────────────────────────────────────────────────
+function CommunityStrip({
+  post,
+  isJoined,
+  onJoin,
+}: {
+  post: AnyPost;
+  isJoined: boolean;
+  onJoin: (cid: number) => void;
+}) {
+  const communityId = getCommunityId(post);
+  const communityName =
+    (post as CommunityPost).communityName ||
+    (post as PollPost).communityName ||
+    "Community";
+  const communityAvatar =
+    (post as CommunityPost).communityAvatar || (post as PollPost).communityAvatar;
+  const memberCount =
+    (post as CommunityPost).communityMemberCount ||
+    (post as PollPost).communityMemberCount;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-gradient-to-r from-sky-500/5 to-transparent border border-sky-500/10 mb-2"
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        {communityAvatar ? (
+          <motion.img
+            src={communityAvatar}
+            className="w-9 h-9 rounded-lg object-cover shrink-0 ring-2 ring-blue-500/20"
+            alt=""
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+            <Users size={16} className="text-sky-500" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-sky-500 truncate">{communityName}</p>
+          {memberCount && (
+            <p className="text-[10px] text-base-content/60 mt-0.5">{memberCount} members</p>
+          )}
+        </div>
+      </div>
+      {communityId && (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onJoin(communityId);
+          }}
+          className={`shrink-0 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all border ${
+            isJoined
+              ? "bg-base-200 text-base-content/70 border-base-300"
+              : "bg-rose-50 text-rose-500 border-rose-100/50 hover:bg-rose-100 shadow-sm shadow-rose-200/20"
+          }`}
+        >
+          {isJoined ? <CheckCircle2 size={12} className="inline mr-1" /> : <UserPlus size={12} className="inline mr-1" />}
+          {isJoined ? "Joined" : "Join"}
+        </motion.button>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── Author Row ───────────────────────────────────────────────────────────────
+function AuthorRow({
+  post,
+  badge,
+  onDelete,
+  isDeleting,
+  showDelete,
+  rightAction,
+}: {
+  post: AnyPost;
+  badge?: string;
+  onDelete?: () => void;
+  isDeleting?: boolean;
+  showDelete?: boolean;
+  rightAction?: React.ReactNode;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-3"
+    >
+      <motion.div
+        className="relative shrink-0"
+      >
+        {post.userProfileImage ? (
+          <img
+            src={post.userProfileImage}
+            className="w-10 h-10 rounded-full object-cover ring-2 ring-red-400/30 ring-offset-1 ring-offset-slate-100"
+            alt=""
+          />
+        ) : (
+          <img
+            src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(
+              post.username || "?"
+            )}`}
+            className="w-10 h-10 rounded-full object-cover bg-slate-200 ring-2 ring-red-400/30 ring-offset-1 ring-offset-slate-100"
+            alt="Avatar"
+          />
+        )}
+        <motion.div
+          animate={{ scale: [1, 1.2, 1] }}
+          transition={{ repeat: Infinity, duration: 3 }}
+          className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow-md"
+        />
+      </motion.div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-base-content">
+            {post.userDisplayName || post.username}
+          </span>
+          {badge && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200"
+            >
+              {badge}
+            </motion.span>
+          )}
+        </div>
+        <p className="text-xs text-base-content/60 mt-0.5 font-medium">
+          {post.timeAgo ?? "just now"}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        {rightAction}
+        {showDelete && onDelete && (
+        <motion.button
+          onClick={onDelete}
+          disabled={isDeleting}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="p-2 text-base-content/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-40"
+          title="Delete post"
+        >
+          {isDeleting ? <span className="loading loading-spinner loading-xs" /> : <Trash2 size={16} />}
+        </motion.button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Status Badge ───────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: PostStatus }) {
+  if (status === "RESOLVED")
+    return (
+      <motion.span
+        initial={{ scale: 0, rotate: -90 }}
+        animate={{ scale: 1, rotate: 0 }}
+        className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200"
+      >
+        <CheckCircle2 size={13} /> Resolved
+      </motion.span>
+    );
+  if (status === "ACTIVE")
+    return (
+      <motion.span
+        initial={{ scale: 0, rotate: -90 }}
+        animate={{ scale: 1, rotate: 0 }}
+        className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 border border-amber-200"
+      >
+        <Clock size={13} /> Active
+      </motion.span>
+    );
+  return null;
+}
+
+// ─── Resolve Modal ───────────────────────────────────────────────────────────
+function ResolveModal({
+  isOpen,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (msg: string) => void;
+}) {
+  const [msg, setMsg] = useState("");
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 10, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 10, opacity: 0 }}
+            className="w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.h3
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-2 flex items-center gap-2 text-lg font-bold text-base-content"
+            >
+              <CheckCircle2 size={20} className="text-emerald-600" />
+              Mark Issue Resolved
+            </motion.h3>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="mb-4 text-sm text-base-content/70"
+            >
+              Provide an update message for the citizen who raised this issue.
+            </motion.p>
+            <motion.textarea
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="w-full p-3 rounded-lg border border-base-300 bg-base-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none text-sm font-medium placeholder-base-content/40 transition-all"
+              rows={4}
+              placeholder="e.g. Road repair completed on 15 Jan 2025…"
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+            />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="mt-5 flex justify-end gap-3"
+            >
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                disabled={!msg.trim()}
+                onClick={() => onConfirm(msg.trim())}
+                className="px-4 py-2 rounded-lg font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/30"
+              >
+                Confirm
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ─── Action Pill ──────────────────────────────────────────────────────────────
+function ActionPill({
+  onClick,
+  active = false,
+  disabled = false,
+  children,
+  vertical = false,
+  activeClass = "bg-blue-600/10 text-blue-600",
+}: {
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+  vertical?: boolean;
+  activeClass?: string;
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      disabled={disabled}
+      whileHover={{ scale: disabled ? 1 : 1.08, y: -2 }}
+      whileTap={{ scale: disabled ? 1 : 0.92 }}
+      transition={{ type: "spring", stiffness: 400, damping: 15 }}
+      className={`flex items-center gap-2 rounded-xl transition-all duration-200 disabled:opacity-30 select-none ${
+        vertical ? "p-3 flex-col min-w-[54px]" : "px-4 py-2.5"
+      } text-[11px] font-black uppercase tracking-wider ${
+        active
+          ? `${activeClass} shadow-none`
+          : "text-base-content/50 hover:bg-base-200 hover:text-base-content"
+      }`}
+    >
+      {children}
+    </motion.button>
+  );
+}
+
+// ─── Poll Body ───────────────────────────────────────────────────────────────
+function PollBody({
+  post,
+  onVote,
+}: {
+  post: PollPost;
+  onVote?: (pollId: number, ids: number[]) => void;
+}) {
+  const [votedIds, setVotedIds] = useState<number[]>(post?.votedOptionIds || []);
+  
+  if (!post || !post.options || !Array.isArray(post.options) || post.options.length === 0) {
+    return null;
+  }
+
+  const showResults = post.showResults || post.userHasVoted || post.isExpired;
+
+  const handleVote = (optionId: number) => {
+    if (post.isExpired || post.userHasVoted) return;
+    const next = post.allowMultipleVotes
+      ? votedIds.includes(optionId)
+        ? votedIds.filter((id) => id !== optionId)
+        : [...votedIds, optionId]
+      : [optionId];
+    setVotedIds(next);
+    onVote?.(post.pollId, next);
+  };
+
+  return (
+    <div className="space-y-3 w-full">
+      {post.options.map((opt) => {
+        const isSelected = votedIds.includes(opt.id);
+        return (
+          <motion.div
+            key={opt.id}
+            onClick={() => handleVote(opt.id)}
+            className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${
+              isSelected ? "border-blue-500 bg-blue-500/5" : "border-base-300 hover:border-base-content/20"
+            }`}
+            whileHover={{ x: 4 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            {showResults && (
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${opt.percentage}%` }}
+                className={`absolute inset-y-0 left-0 transition-all ${
+                  isSelected ? "bg-blue-500/20" : "bg-base-content/5"
+                }`}
+              />
+            )}
+            <div className="relative z-10 p-3.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                  isSelected ? "border-blue-500 bg-blue-500" : "border-base-content/20"
+                }`}>
+                  {isSelected && <Check size={12} className="text-white" />}
+                </div>
+                <span className={`text-sm font-bold ${isSelected ? "text-blue-600" : "text-base-content/80"}`}>
+                  {opt.optionText}
+                </span>
+              </div>
+              {showResults && (
+                <span className="text-xs font-black text-base-content/40">{Math.round(opt.percentage)}%</span>
+              )}
+            </div>
+          </motion.div>
+        );
+      })}
+      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-base-content/30 px-1">
+        <span>{post.totalVotes.toLocaleString()} votes</span>
+        <span>{post.timeLeft || "Ended"}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Scope Pill ───────────────────────────────────────────────────────────────
+function ScopePill({ scope, desc }: { scope?: BroadcastScope; desc?: string }) {
+  const label = desc || scopeLabel(scope);
+  const icon = scopeIcon(scope);
+
+  return (
+    <motion.span
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="inline-flex items-center gap-1 rounded-lg bg-base-200 px-3 py-1.5 text-xs font-semibold text-base-content/80"
+    >
+      {icon}
+      {label}
+    </motion.span>
+  );
+}
+
+// ─── Main PostCard ────────────────────────────────────────────────────────────
+export default function PostCard({
+  post,
+  currentUser,
+  onLike,
+  onSave,
+  onShare,
+  onResolve,
+  onVote,
+  onDelete,
+  hideCommunityStrip,
+}: PostCardProps) {
+  const [liked, setLiked] = useState(!!(post as AnyPost)?.isLikedByCurrentUser);
+  const [disliked, setDisliked] = useState(!!(post as IssuePost)?.isDislikedByCurrentUser);
+  const [saved, setSaved] = useState(
+    !!((post as any).isSavedByCurrentUser ?? (post as any).isSaved ?? false)
+  );
+  const [likeCount, setLikeCount] = useState(post?.likeCount ?? 0);
+  const [dislikeCount, setDislikeCount] = useState((post as IssuePost)?.dislikeCount ?? 0);
+  const [shareCount, setShareCount] = useState(post?.shareCount ?? 0);
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isJoined, setIsJoined] = useState((post as CommunityPost).isMember ?? false);
+  const [hasShared, setHasShared] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const { copied, flash } = useCopied();
+
+  useEffect(() => {
+    if (post) {
+      setLiked(!!(post as AnyPost)?.isLikedByCurrentUser);
+      setLikeCount(post.likeCount ?? 0);
+      setShareCount(post.shareCount ?? 0);
+      setSaved(!!((post as any).isSavedByCurrentUser ?? (post as any).isSaved ?? false));
+      if ("dislikeCount" in post) setDislikeCount((post as IssuePost).dislikeCount ?? 0);
+      if ("isDislikedByCurrentUser" in post) setDisliked(!!(post as IssuePost).isDislikedByCurrentUser);
+    }
+  }, [post]);
+
+  if (!post) return null;
+
+  const isIssue = post.variant === "issue";
+  const isGovt = post.variant === "government";
+  const isCommunity = post.variant === "community";
+  const interactionType: "posts" | "social-posts" = isIssue ? "posts" : "social-posts";
+  const isResolved = isIssue && (post as IssuePost).status === "RESOLVED";
+
+  const govCanResolve =
+    isIssue &&
+    (post as IssuePost).status === "ACTIVE" &&
+    canUpdateResolution(post as IssuePost, currentUser);
+
+  const showStatusBadge = isIssue && canUpdateResolution(post as IssuePost, currentUser);
+
+  const postHasCommunity = isCommunityPost(post);
+
+  // Media handling
+  const allMediaUrls: string[] = (() => {
+    const urls: string[] = [];
+    if ("mediaUrls" in post && Array.isArray(post.mediaUrls)) {
+      (post.mediaUrls as string[]).filter(Boolean).forEach((u) => {
+        urls.push(resolveMediaUrl(u, "social-posts"));
+      });
+    }
+    if (urls.length === 0 && "imageName" in post && typeof post.imageName === "string" && post.imageName.length > 0) {
+      urls.push(resolveMediaUrl(post.imageName, "posts"));
+    }
+    return urls;
+  })();
+  const hasMedia = allMediaUrls.length > 0;
+
+  // Handlers
+  async function handleLike() {
+    if (isResolved) return;
+    const next = !liked;
+    setLiked(next);
+    if (next && disliked) {
+      setDisliked(false);
+      setDislikeCount((n) => Math.max(0, n - 1));
+    }
+    setLikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
+    onLike?.(post.id, next);
+
+    const ep = `/api/interactions/${interactionType}/${post.id}/like`;
+    try {
+      const res = await apiPost(ep, {});
+      const data = (res as any)?.data ?? res;
+      if (data && typeof data.liked === "boolean") setLiked(data.liked);
+      if (data && typeof data.likeCount === "number") setLikeCount(data.likeCount);
+    } catch {
+      setLiked(!next);
+      setLikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
+    }
+  }
+
+  async function handleDislike() {
+    if (!isIssue || isResolved) return;
+    alert("Dislike feature coming soon!");
+  }
+
+  async function handleSave() {
+    const next = !saved;
+    setSaved(next);
+    onSave?.(post.id, next);
+    try {
+      await apiPost(`/api/interactions/${interactionType}/${post.id}/save`, {});
+    } catch {
+      setSaved(!next);
+    }
+  }
+
+  async function handleShare() {
+    flash();
+    if (!hasShared) {
+      setShareCount((n) => n + 1);
+      onShare?.(post.id);
+      setHasShared(true);
+    }
+    await recordShare(interactionType, post.id);
+  }
+
+  async function handleResolveConfirm(message: string) {
+    setResolving(true);
+    try {
+      await apiPut(
+        `/api/posts/${post.id}/resolution?isResolved=true&updateMessage=${encodeURIComponent(
+          message
+        )}`
+      );
+      setResolveOpen(false);
+      onResolve?.(post.id, true, message);
+    } catch (err) {
+      console.error("Resolve error:", err);
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (onDelete) {
+      onDelete(post.id);
+      return;
+    }
+    if (!window.confirm("Delete this post?")) return;
+    setIsDeleting(true);
+    try {
+      const ep = isIssue ? `/api/posts/${post.id}` : `/api/social-posts/${post.id}`;
+      await fetch(ep, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token")}`,
+        },
+      });
+      window.location.reload();
+    } catch {
+      alert("Failed to delete post");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleJoinCommunity(cid: number) {
+    const next = !isJoined;
+    setIsJoined(next);
+    try {
+      await apiPost(`/api/communities/${cid}/join`, {});
+    } catch {
+      setIsJoined(!next);
+      alert("Could not join community.");
+    }
+  }
+
+  const borderClass = isGovt
+    ? "border-[#1D4ED8]/25 bg-base-100"
+    : isResolved
+      ? "border-emerald-500/20 bg-base-100"
+      : "border-base-300 bg-base-100";
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        whileHover={{ y: -4, boxShadow: "0 20px 60px -15px rgba(0,0,0,0.1)" }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className={`rounded-2xl border ${borderClass} shadow-md overflow-hidden flex flex-col backdrop-blur-sm`}
+      >
+        <div className="p-5 sm:p-6 flex flex-col gap-4 flex-1">
+          {/* Community Strip at top */}
+          {postHasCommunity && !hideCommunityStrip && (
+            <CommunityStrip post={post} isJoined={isJoined} onJoin={handleJoinCommunity} />
+          )}
+
+          {/* Header Row: Author + Join */}
+          <div className="flex items-start justify-between gap-3">
+             {isGovt ? (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-3"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-red-400/10 flex items-center justify-center shrink-0">
+                    <BadgeCheck size={18} className="text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-red-500/80 truncate">
+                      {(post as GovernmentPost).department}
+                    </p>
+                    <p className="text-[10px] text-base-content/50 mt-0.5">{post.timeAgo ?? "just now"}</p>
+                  </div>
+                </motion.div>
+              ) : (
+                <AuthorRow
+                  post={post}
+                  badge={isCommunity ? (post as CommunityPost).authorRole : undefined}
+                  communityName={isCommunityPost(post) ? ((post as any).communityName || "Community") : undefined}
+                  onDelete={handleDelete}
+                  isDeleting={isDeleting}
+                  showDelete={!!(post as any).canDelete || post.username === currentUser?.username}
+                  rightAction={null}
+                />
+              )}
+          </div>
+
+          {/* Meta row */}
+          {isIssue && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap items-center gap-2">
+              <ScopePill
+                scope={"broadcastScope" in post ? (post as IssuePost).broadcastScope : undefined}
+                desc={"broadcastScopeDescription" in post ? (post as IssuePost).broadcastScopeDescription : undefined}
+              />
+              {showStatusBadge && <StatusBadge status={(post as IssuePost).status} />}
+            </motion.div>
+          )}
+
+          {/* Mark Resolved banner */}
+          {govCanResolve && !resolving && (
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              onClick={() => setResolveOpen(true)}
+              className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-left"
+            >
+              <span className="flex items-center gap-2 text-xs font-bold text-amber-500">
+                <AlertCircle size={14} /> Assigned to your department
+              </span>
+              <span className="text-[10px] font-black uppercase text-amber-600">Resolve Now →</span>
+            </motion.button>
+          )}
+
+          {/* Content: Text Always Above */}
+          <motion.div className="space-y-2">
+            <motion.p className={`text-sm leading-relaxed text-base-content/90 ${!expanded ? "line-clamp-3" : ""}`}>
+              {post.content}
+            </motion.p>
+            {(post.content?.length ?? 0) > 160 && (
+              <button onClick={() => setExpanded(!expanded)} className="text-[11px] font-black uppercase tracking-wider text-blue-600">
+                {expanded ? "Less ↑" : "More ↓"}
+              </button>
+            )}
+          </motion.div>
+
+          {/* Hashtags / Tagged depts */}
+          {((isIssue && ((post as IssuePost).taggedUsernames?.length ?? 0) > 0) ||
+            ("hashtags" in post && ((post as SocialPost).hashtags?.length ?? 0) > 0)) && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="flex flex-wrap gap-2"
+              >
+                {isIssue &&
+                  (post as IssuePost).taggedUsernames?.map((name) => (
+                    <motion.span
+                      key={name}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"
+                    >
+                      <Building2 size={12} /> @{name}
+                    </motion.span>
+                  ))}
+                {("hashtags" in post) &&
+                  (post as SocialPost).hashtags?.map((tag) => (
+                    <motion.span
+                      key={tag}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                      {tag}
+                    </motion.span>
+                  ))}
+              </motion.div>
+            )}
+
+          {/* Conditional Body Layout */}
+          <div className={hasMedia ? "flex gap-4 items-start" : "flex flex-col gap-4"}>
+             <div className="flex-1 min-w-0 flex flex-col gap-4">
+                {hasMedia && (
+                  <div className="-mx-1">
+                    <ModernMediaCarousel mediaUrls={allMediaUrls} onExpand={() => setLightboxOpen(true)} />
+                  </div>
+                )}
+                
+                {/* Poll Variant Rendering */}
+                {post.variant === "poll" && (post as any).options && (
+                   <PollBody post={post as PollPost} onVote={onVote} />
+                )}
+
+                {isResolved && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs font-bold text-emerald-600">
+                    <CheckCircle2 size={14} /> Issue resolved
+                  </div>
+                )}
+             </div>
+
+             {/* Action Bar: Vertical Sidebar (if media) or Horizontal Bar (if no media) */}
+             {hasMedia ? (
+               <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-2 p-1 rounded-2xl bg-base-200/50 border border-base-300">
+                 <ActionPill onClick={handleLike} active={liked} disabled={isResolved} vertical activeClass="bg-pink-500/10 text-pink-500">
+                   <Heart size={18} className={liked ? "fill-current" : ""} />
+                   <span>{likeCount || ""}</span>
+                 </ActionPill>
+                 <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} vertical activeClass="bg-sky-500/10 text-sky-500">
+                   <MessageSquare size={18} className={commentsOpen ? "fill-current" : ""} />
+                   <span>{post.commentCount || ""}</span>
+                 </ActionPill>
+                 <ActionPill onClick={handleShare} active={copied} vertical activeClass="bg-emerald-500/10 text-emerald-500">
+                   <Share2 size={18} />
+                   <span className="text-[9px] leading-tight mt-0.5">{copied ? "Copied" : (shareCount || "")}</span>
+                 </ActionPill>
+                 <ActionPill onClick={handleSave} active={saved} vertical activeClass="bg-amber-500/10 text-amber-500">
+                   <Bookmark size={18} className={saved ? "fill-current" : ""} />
+                 </ActionPill>
+                 {isIssue && (
+                   <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved} vertical activeClass="bg-rose-500/10 text-rose-500">
+                     <ThumbsDown size={18} className={disliked ? "fill-current" : ""} />
+                     <span>{dislikeCount || ""}</span>
+                   </ActionPill>
+                 )}
+               </motion.div>
+             ) : (
+               <div className="flex items-center gap-2 border-t border-base-300 pt-3">
+                 <ActionPill onClick={handleLike} active={liked} disabled={isResolved} activeClass="bg-pink-500/10 text-pink-500">
+                   <Heart size={16} className={liked ? "fill-current" : ""} />
+                   <span>{likeCount || "Like"}</span>
+                 </ActionPill>
+                 <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} activeClass="bg-sky-500/10 text-sky-500">
+                   <MessageSquare size={16} className={commentsOpen ? "fill-current" : ""} />
+                   <span>{post.commentCount || "Comment"}</span>
+                 </ActionPill>
+                 <ActionPill onClick={handleShare} active={copied} activeClass="bg-emerald-500/10 text-emerald-500">
+                   <Share2 size={16} />
+                   <span>{copied ? "Copied!" : (shareCount || "Share")}</span>
+                 </ActionPill>
+                 <div className="flex-1" />
+                 <ActionPill onClick={handleSave} active={saved} activeClass="bg-amber-500/10 text-amber-500">
+                   <Bookmark size={16} className={saved ? "fill-current" : ""} />
+                 </ActionPill>
+                 {isIssue && (
+                   <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved} activeClass="bg-rose-500/10 text-rose-500">
+                     <ThumbsDown size={16} className={disliked ? "fill-current" : ""} />
+                   </ActionPill>
+                 )}
+               </div>
+             )}
+          </div>
+
+          {/* Comments section */}
+          <AnimatePresence>
+            {commentsOpen && (
+              <div className="mt-2 border-t border-base-300 pt-4">
+                <CommentSection
+                  postId={post.id}
+                  postType={commentPostType(post.variant)}
+                  commentCount={post.commentCount}
+                  currentUsername={currentUser?.username}
+                  currentRole={currentUser?.role}
+                  defaultOpen={true}
+                />
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
+
+      <ResolveModal
+        isOpen={resolveOpen}
+        onClose={() => setResolveOpen(false)}
+        onConfirm={handleResolveConfirm}
+      />
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightboxOpen && hasMedia && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setLightboxOpen(false)}
+              className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition-all z-10"
+            >
+              <X size={20} />
+            </motion.button>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-h-[90vh] max-w-[90vw]"
+            >
+              <ModernMediaCarousel
+                mediaUrls={allMediaUrls}
+                onExpand={() => {}}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
