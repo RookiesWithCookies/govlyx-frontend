@@ -1,6 +1,6 @@
 import type { AnyPost, GovernmentPost } from "../components/post/PostCard";
 
-export function resolveMediaUrl(path?: string, type: "posts" | "social-posts" = "posts"): string {
+export function resolveMediaUrl(path?: string | null, type: "posts" | "social-posts" = "posts"): string {
   if (!path) return "";
   
   // If it's already a full URL (Cloudinary, S3, etc.)
@@ -41,12 +41,13 @@ export function toPostCardPost(dto: any): AnyPost {
   // ── Normalize author fields ──────────────────────────────────────────────
   // AuthorDto fields: { username, profileImage, roleName, isActive }
   // PostCard AuthorRow expects top-level: username, userDisplayName, userProfileImage
-  const authorUsername = dto.username ?? dto.author?.username ?? dto.user?.username ?? dto.user?.actualUsername ?? "";
+  const authorUsername = dto.authorUsername ?? dto.username ?? dto.author?.username ?? dto.user?.username ?? dto.user?.actualUsername ?? "";
   const authorImage = resolveMediaUrl(
     dto.userProfileImage ?? 
     dto.author?.profileImage ?? 
     dto.author?.profileImageUrl ?? 
     dto.user?.profileImage ??
+    dto.authorProfileImage ??
     null
   );
   const timeAgo = dto.timeAgo ?? formatTimeAgo(dto.createdAt);
@@ -60,7 +61,7 @@ export function toPostCardPost(dto: any): AnyPost {
   };
 
   // If it's explicitly a government post or has a broadcast scope
-  if (dto.variant === "government" || dto.isGovernmentBroadcast || dto.broadcastScope) {
+  if (dto.variant === "government" || dto.isGovernmentBroadcast === true) {
     return {
       ...normalized,
       variant: "government",
@@ -78,27 +79,27 @@ export function toPostCardPost(dto: any): AnyPost {
   }
 
   // Handle Polls — poll data lives in dto.poll (PollSummaryDto)
-  if (dto.variant === "poll" || (dto.isPoll && dto.poll)) {
-    const poll = dto.poll;
+  if (dto.variant === "poll" || dto.isPoll === true) {
+    const poll = dto.poll || {};
     return {
       ...normalized,
       variant: "poll",
-      pollId: poll?.pollId ?? dto.pollId,
-      question: poll?.question ?? dto.question ?? dto.content ?? "",
-      options: (poll?.options ?? dto.options ?? []).map((o: any) => ({
-        id: o.id,
+      pollId: poll.pollId ?? dto.pollId ?? dto.id,
+      question: poll.question ?? dto.question ?? dto.content ?? "",
+      options: (poll.options ?? dto.options ?? []).map((o: any) => ({
+        id: o.optionId ?? o.id,
         optionText: o.optionText ?? "",
         voteCount: o.voteCount ?? 0,
-        percentage: o.percentage ?? 0,
+        percentage: o.votePercentage ?? o.percentage ?? 0,
       })),
-      totalVotes: poll?.totalVotes ?? dto.totalVotes ?? 0,
-      allowMultipleVotes: poll?.allowMultipleVotes ?? dto.allowMultipleVotes ?? false,
-      isExpired: poll?.isExpired ?? dto.isExpired ?? false,
-      userHasVoted: poll?.userHasVoted ?? dto.userHasVoted ?? false,
-      votedOptionIds: poll?.votedOptionIds ?? dto.votedOptionIds ?? [],
-      showResults: poll?.showResults ?? dto.showResults ?? false,
-      timeLeft: poll?.timeLeft ?? dto.timeLeft ?? null,
-      expiresAt: poll?.expiresAt ?? dto.expiresAt ?? null,
+      totalVotes: poll.totalVotes ?? dto.totalVotes ?? 0,
+      allowMultipleVotes: poll.allowMultipleVotes ?? dto.allowMultipleVotes ?? false,
+      isExpired: poll.expired ?? poll.isExpired ?? dto.isExpired ?? false,
+      userHasVoted: poll.userHasVoted ?? dto.userHasVoted ?? false,
+      votedOptionIds: poll.userVotedOptionIds ?? poll.votedOptionIds ?? dto.votedOptionIds ?? [],
+      showResults: poll.showResults ?? (poll.userHasVoted || poll.expired) ?? dto.showResults ?? false,
+      timeLeft: poll.timeLeft ?? dto.timeLeft ?? null,
+      expiresAt: poll.expiresAt ?? dto.expiresAt ?? null,
     } as any;
   }
 

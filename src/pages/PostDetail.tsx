@@ -5,6 +5,7 @@ import { postService } from "../api/postService";
 import PostCard from "../components/post/PostCard";
 import type { AnyPost } from "../components/post/PostCard";
 import { toPostCardPost } from "../utils/postUtils";
+import { useCurrentUser } from "../hooks/useUser";
 
 const PostDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,6 +13,13 @@ const PostDetail: React.FC = () => {
   const [post, setPost] = useState<AnyPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: user } = useCurrentUser();
+
+  const currentUser = user ? {
+    id: user.id,
+    username: user.actualUsername || user.username,
+    role: user.role
+  } : undefined;
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -101,6 +109,7 @@ const PostDetail: React.FC = () => {
       <div className="w-full">
         <PostCard
           post={post}
+          currentUser={currentUser}
           onLike={(likedId, liked) => {
              setPost(prev => prev && prev.id === likedId ? { ...prev, isLikedByCurrentUser: liked, likeCount: prev.likeCount + (liked ? 1 : -1) } : prev);
           }}

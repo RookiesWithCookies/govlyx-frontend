@@ -10,7 +10,7 @@ import PostCard from "../components/post/PostCard";
 import PostSkeleton from "../components/post/PostSkeleton";
 import type { AnyPost, CurrentUser } from "../components/post/PostCard";
 import { useCurrentUser } from "../hooks/useUser";
-import { toPostCardPost } from "../utils/postUtils";
+import { toPostCardPost, resolveMediaUrl } from "../utils/postUtils";
 
 // ─── auth helpers ─────────────────────────────────────────────────────────────
 function authHeaders(): HeadersInit {
@@ -28,15 +28,6 @@ async function apiFetch(url: string) {
 }
 
 
-
-async function apiDelete(url: string) {
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json().catch(() => null);
-}
 
 // ─── share helper ─────────────────────────────────────────────────────────────
 
@@ -97,24 +88,18 @@ const Profile = () => {
   const [tab, setTab] = useState<Tab>("posts");
   const [postFilter, setPostFilter] = useState<PostFilter>("active");
 
-  async function handleDelete(type: 'posts' | 'social-posts', id: number) {
-    if (!window.confirm("Are you sure you want to delete this content? This action cannot be undone.")) return;
-    try {
-      await apiDelete(`/api/${type}/${id}`);
-      if (type === 'posts') {
-        setAllPosts(prev => prev.filter(p => p.id !== id));
-        setActivePosts(prev => prev.filter(p => p.id !== id));
-        setResolvedPosts(prev => prev.filter(p => p.id !== id));
-        setIssueCount(n => Math.max(0, n - 1));
-      } else {
-        setSocialPosts(prev => prev.filter(p => p.id !== id));
-        setSocialCount(n => Math.max(0, n - 1));
-      }
-    } catch (err) {
-      console.error("Delete failed", err);
-      alert("Failed to delete content. Please try again later.");
+  const handleDelete = (type: 'posts' | 'social-posts', id: number) => {
+    // Parent only handles state removal. PostCard handles confirm + API.
+    if (type === 'posts') {
+      setAllPosts(prev => prev.filter(p => p.id !== id));
+      setActivePosts(prev => prev.filter(p => p.id !== id));
+      setResolvedPosts(prev => prev.filter(p => p.id !== id));
+      setIssueCount(n => Math.max(0, n - 1));
+    } else {
+      setSocialPosts(prev => prev.filter(p => p.id !== id));
+      setSocialCount(n => Math.max(0, n - 1));
     }
-  }
+  };
 
   const [username, setUsername] = useState<string>("...");
   const [memberSince, setMemberSince] = useState("");
@@ -365,7 +350,7 @@ const Profile = () => {
           <div className="avatar">
             <div className="h-16 w-16 rounded-full overflow-hidden border-2 border-primary shadow-lg bg-base-300">
                <img 
-                src={user?.profileImage || `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(username)}`} 
+                src={resolveMediaUrl(user?.profileImage, "social-posts") || `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(username)}`} 
                 alt="Profile Avatar" 
                 className="w-full h-full object-cover" 
               />
@@ -485,6 +470,7 @@ const Profile = () => {
                 key={`${post.id}-${post.variant}`}
                 post={post}
                 currentUser={currentUser}
+                hideDelete={true}
               />
             ))
           )}

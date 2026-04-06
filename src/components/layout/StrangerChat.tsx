@@ -502,6 +502,18 @@ function MessageArea({ messages, myId, partnerTyping, bottomRef, onReply }: { me
 function Bubble({ msg, isMine, allMessages, onReply }: { msg: ChatMessageDto; isMine: boolean; allMessages: ChatMessageDto[]; onReply: (r: { messageId: string; senderId: string; content?: string; messageType: MessageType }) => void }) {
   const [hovered, setHovered] = useState(false);
   const [showViewOnce, setShowViewOnce] = useState(false);
+  const [isFocused, setIsFocused] = useState(true);
+
+  useEffect(() => {
+    const handleFocus = () => setIsFocused(true);
+    const handleBlur = () => setIsFocused(false);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
   
   const dragX = useMotionValue(0);
   const replyIconScale = useTransform(dragX, [0, 50, 80], [0, 0.8, 1.2]);
@@ -517,9 +529,44 @@ function Bubble({ msg, isMine, allMessages, onReply }: { msg: ChatMessageDto; is
 
   const renderMedia = () => {
     if (msg.viewOnce && !showViewOnce) return <div onClick={() => setShowViewOnce(true)} className="relative w-72 aspect-video rounded-3xl bg-base-content/5 backdrop-blur-3xl flex flex-col items-center justify-center gap-4 cursor-pointer group/vo border border-base-content/5 hover:bg-base-content/10 transition-colors"><div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-base-content/60 shadow-2xl"><EyeOff size={32} /></div><p className="text-[10px] font-black text-base-content/60 uppercase tracking-[0.4em]">Unlock Private Media</p></div>;
-    return <div className="relative overflow-hidden rounded-2xl bg-base-100 shadow-2xl ring-1 ring-base-content/5">
-      {msg.messageType === "IMAGE" ? <img src={msg.mediaPayload} className="max-w-full max-h-[500px] object-cover cursor-pointer" onClick={() => window.open(msg.mediaPayload, "_blank")} alt="" /> : <video src={msg.mediaPayload} controls className="max-w-full max-h-[500px]" onEnded={() => msg.viewOnce && setShowViewOnce(false)} />}
-      {msg.viewOnce && <div className="absolute top-4 right-4 px-3 py-1.5 bg-warning/90 backdrop-blur-md rounded-xl text-[10px] font-black text-warning-content uppercase tracking-widest flex items-center gap-2 shadow-xl shrink-0"><EyeOff size={14} /> One-Time View</div>}
+    
+    // Anti-screenshot / Anti-screenrecord mitigation: hide if window loses focus (snipping tool, OBS losing focus)
+    if (!isMine && !isFocused) {
+      return (
+        <div className="relative w-72 aspect-video rounded-2xl bg-black flex flex-col items-center justify-center border border-white/10 gap-2">
+          <EyeOff size={24} className="text-white/40" />
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] text-center px-4">Hidden to protect privacy</p>
+        </div>
+      );
+    }
+
+    return <div 
+      className="relative overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-base-content/5 pointer-events-auto"
+      onContextMenu={(e) => e.preventDefault()} // Block right-click save
+    >
+      {/* Absolute overlay over the media to prevent long-press and drag on mobile */}
+      <div className="absolute inset-0 z-10 w-full h-full pointer-events-none" style={{ WebkitTouchCallout: 'none' }} />
+      
+      {msg.messageType === "IMAGE" ? (
+        <img 
+          src={msg.mediaPayload} 
+          className="max-w-full max-h-[500px] object-cover pointer-events-auto select-none" 
+          draggable={false}
+          style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+          alt="Protected Media" 
+        />
+      ) : (
+        <video 
+          src={msg.mediaPayload} 
+          controlsList="nodownload nofullscreen noremoteplayback" 
+          disablePictureInPicture
+          controls 
+          className="max-w-full max-h-[500px] pointer-events-auto select-none relative z-20" 
+          onContextMenu={(e) => e.preventDefault()}
+          onEnded={() => msg.viewOnce && setShowViewOnce(false)} 
+        />
+      )}
+      {msg.viewOnce && <div className="absolute top-4 right-4 z-30 px-3 py-1.5 bg-warning/90 backdrop-blur-md rounded-xl text-[10px] font-black text-warning-content uppercase tracking-widest flex items-center gap-2 shadow-xl shrink-0"><EyeOff size={14} /> One-Time View</div>}
     </div>;
   };
 

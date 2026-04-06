@@ -8,6 +8,7 @@ import PostSkeleton from "../components/post/PostSkeleton";
 import axiosInstance from "../api/axiosConfig";
 
 
+import { useCurrentUser } from "../hooks/useUser";
 import { toPostCardPost } from "../utils/postUtils";
 
 
@@ -160,8 +161,15 @@ const Home = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
 
+  const { data: user } = useCurrentUser();
   const { posts, loading, initialLoading, hasMore, error, fatalError, loadMore, retry, updatePost, prependPost, setPosts } =
     useFeed(sourceTab, sortTab);
+
+  const currentUser = user ? {
+    id: user.id,
+    username: user.actualUsername || user.username,
+    role: user.role
+  } : undefined;
 
   const handleLike = useCallback((postId: number, liked: boolean) => {
     const post = posts.find((p) => p.id === postId);
@@ -181,25 +189,10 @@ const Home = () => {
     window.location.href = `/post/${postId}`;
   }, []);
 
-  const handleDelete = useCallback(async (postId: number) => {
-    if (!window.confirm("Are you sure you want to delete this post?")) return;
-    const post = posts.find(p => p.id === postId);
-    if (!post) return;
-    let endpoint = `/api/social-posts/${postId}`;
-    if (post.variant === "issue") endpoint = `/api/posts/${postId}`;
-    else if (post.variant === "social" && post.isPoll) endpoint = `/api/polls/${post.pollId}`;
-    try {
-      const res = await axiosInstance.delete(endpoint);
-      if (res.status === 200 || res.status === 204) setPosts(prev => prev.filter(p => p.id !== postId));
-      else {
-        const errorData = res.data || {};
-        alert(errorData.message || "Failed to delete post.");
-      }
-    } catch (err) {
-      console.error("Delete error:", err);
-      alert("An error occurred while deleting the post.");
-    }
-  }, [posts, setPosts]);
+  const handleDelete = useCallback((postId: number) => {
+    // Only update local state; PostCard handles confirmation and the API call.
+    setPosts(prev => prev.filter(p => p.id !== postId));
+  }, [setPosts]);
 
   useEffect(() => {
     const onPostCreated = (e: Event) => {
@@ -310,6 +303,7 @@ const Home = () => {
             <div key={`${post.id}-${post.variant}`} className="w-full">
               <PostCard
                 post={post}
+                currentUser={currentUser}
                 onLike={handleLike}
                 onSave={handleSave}
                 onShare={handleShare}

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
-  ArrowUp,
-  ArrowDown,
+  ThumbsDown,
+  Heart,
   MessageSquare,
   Share2,
   Bookmark,
@@ -13,21 +13,22 @@ import {
   Globe,
   Building2,
   AlertCircle,
-  BarChart2,
   Trash2,
   ChevronLeft,
   ChevronRight,
   X,
   ImageIcon,
   UserPlus,
+  Play,
+  Volume2,
+  VolumeX,
+  ArrowUp,
 } from "lucide-react";
-import { MdCheck } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
 import CommentSection from "./CommentSection";
 import type { PostType } from "./CommentSection";
-import { resolveMediaUrl } from "../../utils/postUtils";
+import { resolveMediaUrl, toPostCardPost } from "../../utils/postUtils";
 
-// ─── API helpers ──────────────────────────────────────────────────────────────
 // ─── API helpers ──────────────────────────────────────────────────────────────
 async function apiFetch(url: string, method: string, body?: unknown): Promise<unknown> {
   const token = localStorage.getItem("authToken") ?? localStorage.getItem("token");
@@ -46,6 +47,7 @@ async function apiFetch(url: string, method: string, body?: unknown): Promise<un
 
 const apiPost = (url: string, body: unknown) => apiFetch(url, "POST", body);
 const apiPut = (url: string, body?: unknown) => apiFetch(url, "PUT", body);
+const apiDelete = (url: string) => apiFetch(url, "DELETE");
 
 async function recordShare(postType: "posts" | "social-posts", id: number) {
   const url = `${window.location.origin}/${postType}/${id}`;
@@ -54,7 +56,7 @@ async function recordShare(postType: "posts" | "social-posts", id: number) {
   } catch {
     window.prompt("Copy link:", url);
   }
-  apiPost(`/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`, {}).catch(() => {});
+  apiPost(`/api/interactions/${postType}/${id}/share?shareType=LINK_COPY`, {}).catch(() => { });
 }
 
 function useCopied() {
@@ -196,29 +198,25 @@ type PostCardProps = {
   onVote?: (pollId: number, optionIds: number[]) => void;
   onDelete?: (postId: number) => void;
   hideCommunityStrip?: boolean;
+  hideDelete?: boolean;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function scopeIcon(scope?: BroadcastScope) {
-  return scope === "STATE" || scope === "COUNTRY"
-    ? <Globe size={11} />
-    : <MapPin size={11} />;
+  return scope === "STATE" || scope === "COUNTRY" ? <Globe size={11} /> : <MapPin size={11} />;
 }
 
 function scopeLabel(scope?: BroadcastScope, desc?: string) {
   if (desc) return desc;
   const map: Record<string, string> = {
-    AREA: "Area", DISTRICT: "District", STATE: "State", COUNTRY: "National",
+    AREA: "Area",
+    DISTRICT: "District",
+    STATE: "State",
+    COUNTRY: "National",
   };
-  return scope ? (map[scope] ?? "Local") : "Local";
+  return scope ? map[scope] ?? "Local" : "Local";
 }
 
-/**
- * "Mark Resolved" is only shown to:
- *  - ROLE_ADMIN: can resolve any issue
- *  - ROLE_DEPARTMENT: only if their username appears in post.taggedUsernames
- *    (i.e., the issue is actively assigned to their department)
- */
 function canUpdateResolution(post: IssuePost, currentUser?: CurrentUser): boolean {
   if (!currentUser) return false;
   if (currentUser.role === "ROLE_ADMIN") return true;
@@ -231,11 +229,10 @@ function commentPostType(variant: PostVariant): PostType {
   return variant === "issue" ? "post" : "social-posts";
 }
 
-// ─── Determine if a post belongs to a community ───────────────────────────────
 function isCommunityPost(post: AnyPost): boolean {
   if (post.variant === "community") return true;
   if (post.variant === "poll" && !!(post as PollPost).communityId) return true;
-  if ((post.variant === "social") && !!(post as SocialPost).communityId) return true;
+  if (post.variant === "social" && !!(post as SocialPost).communityId) return true;
   return false;
 }
 
@@ -246,46 +243,198 @@ function getCommunityId(post: AnyPost): number | null {
   return null;
 }
 
-// ─── JoinButton – shown only when post is from a community ───────────────────
-function JoinButton({
-  isJoined,
-  onClick,
-  size = "md",
+// ─── Modern Carousel Component ───────────────────────────────────────────────
+function ModernMediaCarousel({
+  mediaUrls,
+  onExpand,
 }: {
-  isJoined: boolean;
-  onClick: (e: React.MouseEvent) => void;
-  size?: "sm" | "md";
+  mediaUrls: string[];
+  onExpand: () => void;
 }) {
-  const base =
-    "inline-flex items-center gap-1.5 font-semibold rounded-full border transition-all duration-200 select-none cursor-pointer";
-  const sizes =
-    size === "sm"
-      ? "text-[11px] px-3 py-1"
-      : "text-xs px-4 py-1.5";
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [imgError, setImgError] = useState<Record<number, boolean>>({});
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  if (isJoined) {
-    return (
-      <button
-        onClick={onClick}
-        className={`${base} ${sizes} border-base-content/20 bg-transparent text-base-content/60 hover:border-error/40 hover:text-error hover:bg-error/5`}
-      >
-        <CheckCircle2 size={12} />
-        Joined
-      </button>
-    );
-  }
+  const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(url);
+  const currentMedia = mediaUrls[activeIndex];
+  const isCurrentVideo = isVideoUrl(currentMedia);
+
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveIndex((i) => (i === 0 ? mediaUrls.length - 1 : i - 1));
+  };
+
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveIndex((i) => (i === mediaUrls.length - 1 ? 0 : i + 1));
+  };
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play();
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!isCurrentVideo) setIsPlaying(false);
+  }, [activeIndex, isCurrentVideo]);
+
   return (
-    <button
-      onClick={onClick}
-      className={`${base} ${sizes} border-[#1D4ED8] bg-[#1D4ED8] text-white hover:bg-[#1e40af] hover:border-[#1e40af] shadow-sm`}
-    >
-      <UserPlus size={12} />
-      Join
-    </button>
+    <div className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 shadow-2xl group">
+      <motion.div
+        className="relative h-64 sm:h-80 w-full bg-black/50 flex items-center justify-center cursor-pointer"
+        onClick={isCurrentVideo ? togglePlay : onExpand}
+        transition={{ duration: 0.3 }}
+      >
+        <AnimatePresence mode="wait">
+          {!imgError[activeIndex] ? (
+            isCurrentVideo ? (
+              <motion.video
+                key={`video-${activeIndex}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                ref={videoRef}
+                src={currentMedia}
+                controls={isPlaying}
+                muted={isMuted}
+                loop
+                playsInline
+                className="h-full w-full object-contain"
+                onClick={togglePlay}
+                onError={() =>
+                  setImgError((prev) => ({ ...prev, [activeIndex]: true }))
+                }
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+              />
+            ) : (
+              <motion.img
+                key={`img-${activeIndex}`}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.3 }}
+                src={currentMedia}
+                alt={`Media ${activeIndex + 1}`}
+                className="h-full w-full object-cover"
+                onError={() =>
+                  setImgError((prev) => ({ ...prev, [activeIndex]: true }))
+                }
+              />
+            )
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center h-full w-full bg-slate-800/50"
+            >
+              <div className="w-12 h-12 rounded-full bg-slate-700/50 flex items-center justify-center mb-2">
+                <ImageIcon size={24} className="stroke-slate-400" />
+              </div>
+              <p className="text-xs font-medium text-slate-400 px-6 text-center">
+                Legacy media unavailable
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Play Icon Overlay for Videos */}
+        <AnimatePresence>
+          {isCurrentVideo && !isPlaying && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+            >
+              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-2xl">
+                <Play size={32} className="text-white fill-white ml-1" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+      </motion.div>
+
+      {/* Navigation arrows */}
+      {mediaUrls.length > 1 && (
+        <>
+          <motion.button
+            onClick={handlePrev}
+            whileHover={{ scale: 1.1, x: -4 }}
+            whileTap={{ scale: 0.95 }}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 transition-all z-20 text-white shadow-lg"
+          >
+            <ChevronLeft size={18} />
+          </motion.button>
+          <motion.button
+            onClick={handleNext}
+            whileHover={{ scale: 1.1, x: 4 }}
+            whileTap={{ scale: 0.95 }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 transition-all z-20 text-white shadow-lg"
+          >
+            <ChevronRight size={18} />
+          </motion.button>
+        </>
+      )}
+
+      {/* Indicator dots */}
+      {mediaUrls.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+          {mediaUrls.map((_, i) => (
+            <motion.button
+              key={i}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex(i);
+              }}
+              whileTap={{ scale: 0.8 }}
+              className={`rounded-full transition-all duration-300 ${i === activeIndex
+                  ? "w-6 h-2 bg-white shadow-lg"
+                  : "w-2 h-2 bg-white/50 hover:bg-white/80"
+                }`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Counter & Video controls */}
+      <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
+        {isCurrentVideo && (
+          <motion.button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMuted(!isMuted);
+            }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md hover:bg-white/30 flex items-center justify-center text-white transition-all"
+          >
+            {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </motion.button>
+        )}
+        {mediaUrls.length > 1 && (
+          <div className="rounded-full bg-black/40 backdrop-blur-sm px-3 py-1.5 text-xs text-white font-semibold font-mono">
+            {activeIndex + 1}/{mediaUrls.length}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-// ─── Community strip at top of card ──────────────────────────────────────────
+// ─── Community Strip ─────────────────────────────────────────────────────────
 function CommunityStrip({
   post,
   isJoined,
@@ -301,130 +450,173 @@ function CommunityStrip({
     (post as PollPost).communityName ||
     "Community";
   const communityAvatar =
-    (post as CommunityPost).communityAvatar ||
-    (post as PollPost).communityAvatar;
+    (post as CommunityPost).communityAvatar || (post as PollPost).communityAvatar;
   const memberCount =
     (post as CommunityPost).communityMemberCount ||
     (post as PollPost).communityMemberCount;
 
   return (
-    <div className="flex items-center justify-between gap-3 pb-3 mb-1 border-b border-base-content/8">
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-gradient-to-r from-sky-500/5 to-transparent border border-sky-500/10 mb-2"
+    >
       <div className="flex items-center gap-2.5 min-w-0">
         {communityAvatar ? (
-          <img
+          <motion.img
             src={communityAvatar}
-            className="w-9 h-9 rounded-xl object-cover shrink-0 ring-1 ring-base-content/10"
+            className="w-9 h-9 rounded-lg object-cover shrink-0 ring-2 ring-blue-500/20"
             alt=""
           />
         ) : (
-          <div className="w-9 h-9 rounded-xl bg-[#1D4ED8]/10 flex items-center justify-center shrink-0">
-            <Users size={16} className="text-[#1D4ED8]" />
+          <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+            <Users size={16} className="text-sky-500" />
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-sm font-bold leading-tight truncate">{communityName}</p>
+          <p className="text-xs font-bold text-sky-500 truncate">{communityName}</p>
           {memberCount && (
-            <p className="text-[11px] text-base-content/50 mt-0.5">{memberCount} members</p>
+            <p className="text-[10px] text-base-content/60 mt-0.5">{memberCount} members</p>
           )}
         </div>
       </div>
       {communityId && (
-        <JoinButton
-          isJoined={isJoined}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           onClick={(e) => {
             e.stopPropagation();
             onJoin(communityId);
           }}
-          size="sm"
-        />
+          className={`shrink-0 text-[10px] px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all border ${isJoined
+              ? "bg-base-200 text-base-content/70 border-base-300"
+              : "bg-rose-50 text-rose-500 border-rose-100/50 hover:bg-rose-100 shadow-sm shadow-rose-200/20"
+            }`}
+        >
+          {isJoined ? <CheckCircle2 size={12} className="inline mr-1" /> : <UserPlus size={12} className="inline mr-1" />}
+          {isJoined ? "Joined" : "Join"}
+        </motion.button>
       )}
-    </div>
+    </motion.div>
   );
 }
 
-// ─── Author row ───────────────────────────────────────────────────────────────
 function AuthorRow({
   post,
   badge,
   onDelete,
   isDeleting,
   showDelete,
+  hideDelete,
+  rightAction,
 }: {
   post: AnyPost;
   badge?: string;
   onDelete?: () => void;
   isDeleting?: boolean;
   showDelete?: boolean;
+  hideDelete?: boolean;
+  rightAction?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2.5">
-      {post.userProfileImage ? (
-        <img
-          src={post.userProfileImage}
-          className="w-8 h-8 rounded-full object-cover shrink-0"
-          alt=""
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-3"
+    >
+      <motion.div
+        className="relative shrink-0"
+      >
+        {post.userProfileImage ? (
+          <img
+            src={post.userProfileImage}
+            className="w-10 h-10 rounded-full object-cover ring-2 ring-red-400/30 ring-offset-1 ring-offset-slate-100"
+            alt=""
+          />
+        ) : (
+          <img
+            src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(
+              post.username || "?"
+            )}`}
+            className="w-10 h-10 rounded-full object-cover bg-slate-200 ring-2 ring-red-400/30 ring-offset-1 ring-offset-slate-100"
+            alt="Avatar"
+          />
+        )}
+        <motion.div
+          animate={{ scale: [1, 1.2, 1] }}
+          transition={{ repeat: Infinity, duration: 3 }}
+          className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow-md"
         />
-      ) : (
-        <img
-          src={`https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(post.username || "?")}`}
-          className="w-8 h-8 rounded-full object-cover shrink-0 bg-base-300"
-          alt="Avatar"
-        />
-      )}
+      </motion.div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-sm font-semibold leading-tight truncate">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-base-content">
             {post.userDisplayName || post.username}
           </span>
           {badge && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#1D4ED8]/10 text-[#1D4ED8]">
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200"
+            >
               {badge}
-            </span>
+            </motion.span>
           )}
         </div>
-        <p className="text-[11px] text-base-content/40 mt-0.5">{post.timeAgo ?? "just now"}</p>
+        <p className="text-xs text-base-content/60 mt-0.5 font-medium">
+          {post.timeAgo ?? "just now"}
+        </p>
       </div>
-      {showDelete && onDelete && (
-        <button
-          onClick={onDelete}
-          disabled={isDeleting}
-          className="p-1.5 text-base-content/30 hover:text-error hover:bg-error/8 rounded-lg transition-colors disabled:opacity-40"
-        >
-          <Trash2 size={14} />
-        </button>
-      )}
-    </div>
+      <div className="flex items-center gap-2">
+        {rightAction}
+        {showDelete && !hideDelete && onDelete && (
+          <motion.button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            disabled={isDeleting}
+            whileHover={{ scale: 1.12, y: -1 }}
+            whileTap={{ scale: 0.94 }}
+            className="group/del relative flex h-9 w-9 items-center justify-center rounded-xl border border-transparent bg-base-300/40 text-base-content/40 transition-all duration-300 hover:border-red-500/30 hover:bg-red-500/5 hover:text-red-600 hover:shadow-lg hover:shadow-red-500/10 backdrop-blur-md disabled:opacity-30"
+            title="Delete post"
+          >
+            <div className="absolute inset-0 rounded-xl bg-red-500/0 transition-all duration-300 group-hover/del:bg-red-500/5" />
+            {isDeleting ? (
+              <span className="loading loading-spinner loading-xs" />
+            ) : (
+              <Trash2 size={16} className="relative z-10 transition-transform duration-300 group-hover/del:rotate-6" />
+            )}
+          </motion.button>
+        )}
+      </div>
+    </motion.div>
   );
 }
 
-// ─── ScopePill ────────────────────────────────────────────────────────────────
-function ScopePill({ scope, desc }: { scope?: BroadcastScope; desc?: string }) {
-  return (
-    <span className="inline-flex items-center gap-0.5 rounded-full bg-base-300 px-2 py-0.5 text-[11px] opacity-60">
-      {scopeIcon(scope)}
-      {scopeLabel(scope, desc)}
-    </span>
-  );
-}
-
-// ─── StatusBadge ─────────────────────────────────────────────────────────────
+// ─── Status Badge ───────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: PostStatus }) {
   if (status === "RESOLVED")
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
-        <CheckCircle2 size={11} /> Resolved
-      </span>
+      <motion.span
+        initial={{ scale: 0, rotate: -90 }}
+        animate={{ scale: 1, rotate: 0 }}
+        className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200"
+      >
+        <CheckCircle2 size={13} /> Resolved
+      </motion.span>
     );
   if (status === "ACTIVE")
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">
-        <Clock size={11} /> Active
-      </span>
+      <motion.span
+        initial={{ scale: 0, rotate: -90 }}
+        animate={{ scale: 1, rotate: 0 }}
+        className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 border border-amber-200"
+      >
+        <Clock size={13} /> Active
+      </motion.span>
     );
   return null;
 }
 
-// ─── ResolveModal ─────────────────────────────────────────────────────────────
+// ─── Resolve Modal ───────────────────────────────────────────────────────────
 function ResolveModal({
   isOpen,
   onClose,
@@ -432,360 +624,240 @@ function ResolveModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (msg: string) => void;
+  onConfirm: (message: string) => void;
 }) {
   const [msg, setMsg] = useState("");
-  if (!isOpen) return null;
+
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        onClick={onClose}
-      >
+      {isOpen && (
         <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xl"
-          onClick={(e) => e.stopPropagation()}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={onClose}
         >
-          <h3 className="mb-1 flex items-center gap-2 text-base font-bold">
-            <CheckCircle2 size={18} className="text-success" />
-            Mark Issue Resolved
-          </h3>
-          <p className="mb-3 text-sm opacity-60">
-            Provide an update message for the citizen who raised this issue.
-          </p>
-          <textarea
-            className="textarea textarea-bordered w-full resize-none text-sm"
-            rows={3}
-            placeholder="e.g. Road repair completed on 15 Jan 2025…"
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-          />
-          <div className="mt-3 flex justify-end gap-2">
-            <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-            <button
-              className="btn btn-success btn-sm"
-              disabled={!msg.trim()}
-              onClick={() => onConfirm(msg.trim())}
+          <motion.div
+            initial={{ scale: 0.95, y: 10, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.95, y: 10, opacity: 0 }}
+            className="w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.h3
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-2 flex items-center gap-2 text-lg font-bold text-base-content"
             >
-              Confirm
-            </button>
-          </div>
+              <CheckCircle2 size={20} className="text-emerald-600" />
+              Mark Issue Resolved
+            </motion.h3>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="mb-4 text-sm text-base-content/70"
+            >
+              Provide an update message for the citizen who raised this issue.
+            </motion.p>
+            <motion.textarea
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="w-full p-3 rounded-lg border border-base-300 bg-base-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none text-sm font-medium placeholder-base-content/40 transition-all"
+              rows={4}
+              placeholder="e.g. Road repair completed on 15 Jan 2025…"
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+            />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="mt-5 flex justify-end gap-3"
+            >
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                disabled={!msg.trim()}
+                onClick={() => onConfirm(msg.trim())}
+                className="px-4 py-2 rounded-lg font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/30"
+              >
+                Confirm
+              </motion.button>
+            </motion.div>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   );
 }
 
-// ─── Action pill button ───────────────────────────────────────────────────────
+// ─── Action Pill ──────────────────────────────────────────────────────────────
 function ActionPill({
   onClick,
   active = false,
-  activeClass = "bg-[#1D4ED8]/10 text-[#1D4ED8]",
   disabled = false,
   children,
+  vertical = false,
+  activeClass = "bg-blue-600/10 text-blue-600",
 }: {
   onClick: () => void;
   active?: boolean;
-  activeClass?: string;
   disabled?: boolean;
   children: React.ReactNode;
+  vertical?: boolean;
+  activeClass?: string;
 }) {
   return (
-    <button
+    <motion.button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-all disabled:opacity-40
-        ${active ? activeClass : "text-base-content/60 hover:bg-base-content/6 hover:text-base-content"}`}
+      whileHover={{ scale: disabled ? 1 : 1.08, y: -2 }}
+      whileTap={{ scale: disabled ? 1 : 0.92 }}
+      transition={{ type: "spring", stiffness: 400, damping: 15 }}
+      className={`flex items-center gap-2 rounded-xl transition-all duration-200 disabled:opacity-30 select-none border border-transparent ${vertical ? "p-3 flex-col min-w-[54px]" : "px-4 py-2.5"
+        } text-[11px] font-black uppercase tracking-wider ${active
+          ? `${activeClass} shadow-sm shadow-current/5`
+          : "text-base-content/50 border-transparent hover:bg-base-200 hover:text-base-content"
+        }`}
     >
       {children}
-    </button>
+    </motion.button>
   );
 }
 
-// ─── Join banner (for non-member community viewers) ───────────────────────────
-function JoinPromptBanner({
-  communityName,
-  onJoin,
+// ─── Poll Body ───────────────────────────────────────────────────────────────
+function PollBody({
+  post,
+  onVote,
+  isProcessing,
 }: {
-  communityName: string;
-  onJoin: (e: React.MouseEvent) => void;
+  post: PollPost;
+  onVote?: (pollId: number, ids: number[]) => void;
+  isProcessing?: boolean;
 }) {
+  const [votedIds, setVotedIds] = useState<number[]>(post?.votedOptionIds || []);
+
+  useEffect(() => {
+    setVotedIds(post?.votedOptionIds || []);
+  }, [post?.votedOptionIds]);
+
+  if (!post || !post.options || !Array.isArray(post.options) || post.options.length === 0) {
+    return null;
+  }
+
+  const showResults = post.showResults || post.userHasVoted || post.isExpired || votedIds.length > 0;
+
+  const handleVote = (optionId: number) => {
+    if (post.isExpired || isProcessing) return;
+    const next = post.allowMultipleVotes
+      ? votedIds.includes(optionId)
+        ? votedIds.filter((id) => id !== optionId)
+        : [...votedIds, optionId]
+      : votedIds.includes(optionId) ? [] : [optionId]; // toggle for single vote too
+    setVotedIds(next);
+    onVote?.(post.pollId, next);
+  };
+
+  // ─── Optimistic Updates ──────────────────────────────────────────
+  const isOptimistic = !post.userHasVoted && votedIds.length > 0;
+  const displayedTotalVotes = isOptimistic ? post.totalVotes + 1 : post.totalVotes;
+  const displayedOptions = useMemo(() => {
+    if (!isOptimistic) return post.options;
+    return post.options.map((opt: PollOption) => {
+      const isSelected = votedIds.includes(opt.id);
+      const newCount = isSelected ? (opt.voteCount || 0) + 1 : (opt.voteCount || 0);
+      const newPercent = displayedTotalVotes > 0 ? (newCount / displayedTotalVotes) * 100 : 0;
+      return { ...opt, percentage: newPercent };
+    });
+  }, [post.options, votedIds, isOptimistic, displayedTotalVotes]);
+  // ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="flex items-center justify-between gap-3 mt-3 rounded-xl bg-[#1D4ED8]/6 border border-[#1D4ED8]/15 px-4 py-3">
-      <p className="text-xs text-base-content/70 leading-relaxed">
-        Join <span className="font-semibold text-base-content">{communityName}</span> to comment and interact with posts.
-      </p>
-      <button
-        onClick={onJoin}
-        className="shrink-0 text-xs font-bold px-4 py-1.5 rounded-full bg-[#1D4ED8] text-white hover:bg-[#1e40af] transition-colors"
-      >
-        Join
-      </button>
+    <div className="space-y-2 w-full mt-2">
+      <div className="space-y-2">
+        {displayedOptions.map((opt) => {
+          const isSelected = votedIds.includes(opt.id);
+          return (
+            <motion.div
+              key={opt.id}
+              onClick={() => handleVote(opt.id)}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              className={`relative overflow-hidden rounded-lg border transition-all cursor-pointer ${isSelected ? "border-blue-500/50 shadow-sm shadow-blue-500/10" : "border-base-content/10"
+                }`}
+            >
+              {/* Progress */}
+              <motion.div
+                initial={false}
+                animate={{ width: showResults ? `${opt.percentage}%` : "0%" }}
+                className={`absolute left-0 top-0 h-full transition-all duration-500 ease-out ${isSelected ? "bg-blue-500/10" : "bg-base-content/5"
+                  }`}
+              />
+
+              {/* Content */}
+              <div className="relative z-10 flex items-center justify-between px-3.5 py-2.5 text-sm">
+                <div className="flex items-center gap-3">
+                  {/* Radio Indicator */}
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${isSelected ? "border-blue-500 bg-blue-500" : "border-base-content/20"
+                    }`}>
+                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+
+                  <span className={`font-semibold ${isSelected ? "text-blue-400" : "text-base-content/80 text-[13px]"}`}>
+                    {opt.optionText}
+                  </span>
+                </div>
+                {showResults && (
+                  <span className="font-bold opacity-60 text-xs text-base-content">
+                    {Math.round(opt.percentage)}%
+                  </span>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Meta */}
+      <div className="mt-3 flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest opacity-60 px-1 text-base-content">
+        <span>{displayedTotalVotes.toLocaleString()} {displayedTotalVotes === 1 ? "vote" : "votes"}</span>
+        <span className="flex items-center gap-1.5">
+          <Clock size={12} />
+          {post.timeLeft || "Ended"}
+        </span>
+      </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PollCard
-// ═══════════════════════════════════════════════════════════════════════════════
-function PollCard({
-  post,
-  currentUser,
-  onVote,
-  onShare,
-  onSave,
-  onDelete,
-}: {
-  post: PollPost;
-  currentUser?: CurrentUser;
-  onVote?: (pollId: number, optionIds: number[]) => void;
-  onShare?: (postId: number) => void;
-  onSave?: (postId: number, saved: boolean) => void;
-  onDelete?: (postId: number) => void;
-}) {
-  const [selected, setSelected] = useState<number[]>(post.votedOptionIds ?? []);
-  const [hasVoted, setHasVoted] = useState(post.userHasVoted ?? false);
-  const [options, setOptions] = useState<PollOption[]>(post.options ?? []);
-  const [totalVotes, setTotalVotes] = useState(post.totalVotes ?? 0);
-  const [saved, setSaved] = useState(post.isSaved ?? false);
-  const [shareCount, setShareCount] = useState(post.shareCount ?? 0);
-  const [voting, setVoting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isJoined, setIsJoined] = useState(post.isMember ?? false);
-  const { copied, flash } = useCopied();
-  const [commentsOpen, setCommentsOpen] = useState(false);
-
-  const hasCommunity = !!post.communityId;
-  const isLoggedIn = !!currentUser || !!(localStorage.getItem("authToken") || localStorage.getItem("token"));
-  const canVote = !hasVoted && !post.isExpired && isLoggedIn;
-  const showResults = hasVoted || post.isExpired;
-
-  function toggleOption(id: number) {
-    if (!canVote) return;
-    setSelected((prev) =>
-      post.allowMultipleVotes
-        ? prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-        : [id]
-    );
-  }
-
-  async function submitVote() {
-    if (!selected.length || voting) return;
-    setVoting(true);
-    try {
-      await apiPost(`/api/polls/${post.pollId}/vote`, selected);
-      const newOpts = options.map((o) => ({
-        ...o,
-        voteCount: o.voteCount + (selected.includes(o.id) ? 1 : 0),
-      }));
-      const newTotal = totalVotes + selected.length;
-      setOptions(newOpts.map((o) => ({
-        ...o,
-        percentage: newTotal > 0 ? Math.round((o.voteCount / newTotal) * 100) : 0,
-      })));
-      setTotalVotes(newTotal);
-      setHasVoted(true);
-      onVote?.(post.pollId, selected);
-    } catch {
-      setSelected(post.votedOptionIds ?? []);
-    } finally {
-      setVoting(false);
-    }
-  }
-
-  async function handleSave() {
-    const next = !saved;
-    setSaved(next);
-    onSave?.(post.id, next);
-    try {
-      await apiPost(`/api/interactions/social-posts/${post.id}/save`, {});
-    } catch {
-      setSaved(!next);
-    }
-  }
-
-  async function handleShare() {
-    flash();
-    setShareCount((n) => n + 1);
-    onShare?.(post.id);
-    await recordShare("social-posts", post.id);
-  }
-
-  async function handleJoinCommunity(cid: number) {
-    const next = !isJoined;
-    setIsJoined(next);
-    try {
-      await apiPost(`/api/communities/${cid}/join`, {});
-    } catch {
-      setIsJoined(!next);
-      alert("Could not join community.");
-    }
-  }
-
-  async function handleDelete() {
-    if (onDelete) { onDelete(post.id); return; }
-    if (!window.confirm("Delete this poll?")) return;
-    setIsDeleting(true);
-    try {
-      await fetch(`/api/polls/${post.pollId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token")}` },
-      });
-      window.location.reload();
-    } catch {
-      alert("Failed to delete poll");
-    } finally {
-      setIsDeleting(false);
-    }
-  }
+// ─── Scope Pill ───────────────────────────────────────────────────────────────
+function ScopePill({ scope, desc }: { scope?: BroadcastScope; desc?: string }) {
+  const label = desc || scopeLabel(scope);
+  const icon = scopeIcon(scope);
 
   return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.18 }}
-      className="rounded-2xl border border-base-300 bg-base-100 shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col"
+    <motion.span
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="inline-flex items-center gap-1 rounded-lg bg-base-200 px-3 py-1.5 text-xs font-semibold text-base-content/80"
     >
-      <div className="p-4 sm:p-5 flex flex-col gap-3 flex-1">
-        {/* Community strip — only if community post */}
-        {hasCommunity && (
-          <CommunityStrip
-            post={post}
-            isJoined={isJoined}
-            onJoin={handleJoinCommunity}
-          />
-        )}
-
-        {/* Author + poll badge */}
-        <div className="flex items-center justify-between gap-2">
-          <AuthorRow
-            post={post}
-            badge={(post as any).authorRole}
-            onDelete={handleDelete}
-            isDeleting={isDeleting}
-            showDelete={post.canDelete}
-          />
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-2.5 py-1 text-[11px] font-semibold text-[#1D4ED8] shrink-0">
-            <BarChart2 size={11} /> Poll
-          </span>
-        </div>
-
-        {/* Question */}
-        <p className="font-semibold text-sm leading-snug">{post.question}</p>
-
-        {/* Options */}
-        <div className="space-y-2">
-          {options.map((opt) => {
-            const isSelected = selected.includes(opt.id);
-            const isVotedFor = post.votedOptionIds?.includes(opt.id);
-            return (
-              <button
-                key={opt.id}
-                onClick={() => toggleOption(opt.id)}
-                disabled={!canVote}
-                className={`relative w-full overflow-hidden rounded-xl border text-left transition-all
-                  ${isSelected && !hasVoted ? "border-[#1D4ED8] ring-1 ring-[#1D4ED8]/25" : isVotedFor ? "border-[#1D4ED8]/50" : "border-base-300"}
-                  ${canVote ? "cursor-pointer hover:border-[#1D4ED8]/50 hover:bg-base-200/50" : "cursor-default"}`}
-              >
-                {showResults && (
-                  <div
-                    className={`absolute inset-y-0 left-0 transition-all duration-500 ${isVotedFor ? "bg-[#1D4ED8]/15" : "bg-base-300/50"}`}
-                    style={{ width: `${opt.percentage}%` }}
-                  />
-                )}
-                <div className="relative z-10 flex items-center justify-between px-3 py-2.5 text-sm">
-                  <span className="flex items-center gap-2">
-                    {!hasVoted && canVote && (
-                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${isSelected ? "border-[#1D4ED8] bg-[#1D4ED8]" : "border-base-content/30"}`}>
-                        {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-                      </span>
-                    )}
-                    {hasVoted && isVotedFor && <MdCheck size={16} className="text-[#1D4ED8] shrink-0" />}
-                    {opt.optionText}
-                  </span>
-                  {showResults && (
-                    <span className={`font-semibold text-xs ${isVotedFor ? "text-[#1D4ED8]" : "opacity-60"}`}>
-                      {opt.percentage}%
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {canVote && selected.length > 0 && (
-          <button
-            onClick={submitVote}
-            disabled={voting}
-            className="btn bg-[#1D4ED8] text-white font-semibold border-none hover:bg-[#1e40af] btn-sm w-full rounded-xl"
-          >
-            {voting ? "Submitting…" : "Vote"}
-          </button>
-        )}
-
-        <div className="flex items-center gap-3 text-[11px] text-base-content/50">
-          <span>{totalVotes.toLocaleString()} votes</span>
-          {(post.timeLeft || post.isExpired) && (
-            <span className="flex items-center gap-1">
-              <Clock size={11} />
-              {post.isExpired ? "Poll ended" : post.timeLeft}
-            </span>
-          )}
-          {hasVoted && !post.isExpired && (
-            <span className="text-success flex items-center gap-0.5">
-              <MdCheck size={13} /> Voted
-            </span>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-0.5 border-t border-base-content/8 pt-3 mt-1">
-          <ActionPill onClick={handleSave} active={saved} activeClass="bg-amber-500/10 text-amber-600">
-            <Bookmark size={16} className={saved ? "fill-current" : ""} />
-            <span className="text-xs">Save</span>
-          </ActionPill>
-          <ActionPill onClick={handleShare} active={copied} activeClass="text-success">
-            <Share2 size={16} />
-            <span className="text-xs">{copied ? "Copied!" : shareCount > 0 ? shareCount : "Share"}</span>
-          </ActionPill>
-          <ActionPill onClick={() => setCommentsOpen(!commentsOpen)}>
-            <MessageSquare size={16} />
-            <span className="text-xs">{post.commentCount > 0 ? post.commentCount : "Comment"}</span>
-          </ActionPill>
-        </div>
-
-        {commentsOpen && (
-          <CommentSection
-            postId={post.id}
-            postType="social-posts"
-            commentCount={post.commentCount}
-            currentUsername={currentUser?.username}
-            currentRole={currentUser?.role}
-            defaultOpen={true}
-          />
-        )}
-
-        {/* Join prompt banner — only when community & not yet joined */}
-        {hasCommunity && !isJoined && (
-          <JoinPromptBanner
-            communityName={(post as PollPost).communityName || "this community"}
-            onJoin={(e) => { e.stopPropagation(); handleJoinCommunity(post.communityId!); }}
-          />
-        )}
-      </div>
-    </motion.div>
+      {icon}
+      {label}
+    </motion.span>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Main PostCard
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function PostCard({
   post,
   currentUser,
@@ -796,12 +868,12 @@ export default function PostCard({
   onVote,
   onDelete,
   hideCommunityStrip,
+  hideDelete,
 }: PostCardProps) {
-
   const [liked, setLiked] = useState(!!(post as AnyPost)?.isLikedByCurrentUser);
   const [disliked, setDisliked] = useState(!!(post as IssuePost)?.isDislikedByCurrentUser);
   const [saved, setSaved] = useState(
-    !!((post as any).isSavedByCurrentUser ?? (post as any).isSaved ?? (post as any).saved ?? false)
+    !!((post as any).isSavedByCurrentUser ?? (post as any).isSaved ?? false)
   );
   const [likeCount, setLikeCount] = useState(post?.likeCount ?? 0);
   const [dislikeCount, setDislikeCount] = useState((post as IssuePost)?.dislikeCount ?? 0);
@@ -809,12 +881,11 @@ export default function PostCard({
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isJoined, setIsJoined] = useState((post as CommunityPost).isMember ?? false);
+  const [isJoined, setIsJoined] = useState((post as any).isMember ?? false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [imgError, setImgError] = useState<Record<number, boolean>>({});
+  const [isProcessing, setIsProcessing] = useState(false);
   const { copied, flash } = useCopied();
 
   useEffect(() => {
@@ -822,41 +893,40 @@ export default function PostCard({
       setLiked(!!(post as AnyPost)?.isLikedByCurrentUser);
       setLikeCount(post.likeCount ?? 0);
       setShareCount(post.shareCount ?? 0);
-      setSaved(!!((post as any).isSavedByCurrentUser ?? (post as any).saved ?? false));
+      setSaved(!!((post as any).isSavedByCurrentUser ?? (post as any).isSaved ?? false));
       if ("dislikeCount" in post) setDislikeCount((post as IssuePost).dislikeCount ?? 0);
       if ("isDislikedByCurrentUser" in post) setDisliked(!!(post as IssuePost).isDislikedByCurrentUser);
+      setIsJoined((post as any).isMember ?? false);
     }
   }, [post]);
 
-  if (!post) return null;
+  useEffect(() => {
+    const handlePostSync = (e: any) => {
+      if (e.detail.postId !== post?.id) return;
+      if (e.detail.source === 'like') {
+        setLiked(e.detail.liked);
+        if (e.detail.likeCount !== undefined) setLikeCount(e.detail.likeCount);
+      } else if (e.detail.source === 'save') {
+        setSaved(e.detail.saved);
+      } else if (e.detail.source === 'share') {
+        if (e.detail.shareCount !== undefined) setShareCount(e.detail.shareCount);
+      }
+    };
+    window.addEventListener('POST_SYNC', handlePostSync);
+    return () => window.removeEventListener('POST_SYNC', handlePostSync);
+  }, [post?.id]);
 
-  if (post.variant === "poll") {
-    return (
-      <PollCard
-        post={post as PollPost}
-        currentUser={currentUser}
-        onVote={onVote}
-        onShare={onShare}
-        onSave={onSave}
-        onDelete={onDelete}
-      />
-    );
+  if (!post) return null;
+  if ((post as any).status === "DELETED" || (post as any).status === "FLAGGED") {
+    return null;
   }
 
   const isIssue = post.variant === "issue";
   const isGovt = post.variant === "government";
   const isCommunity = post.variant === "community";
-  const isSocial = post.variant === "social";
   const interactionType: "posts" | "social-posts" = isIssue ? "posts" : "social-posts";
   const isResolved = isIssue && (post as IssuePost).status === "RESOLVED";
 
-  /**
-   * govCanResolve: show "Mark Resolved" button ONLY when:
-   *  1. It's an issue post
-   *  2. The issue is still ACTIVE (not resolved)
-   *  3. The current user is an ADMIN, OR is a DEPARTMENT user whose username
-   *     is in post.taggedUsernames (the department this post is assigned to)
-   */
   const govCanResolve =
     isIssue &&
     (post as IssuePost).status === "ACTIVE" &&
@@ -864,11 +934,9 @@ export default function PostCard({
 
   const showStatusBadge = isIssue && canUpdateResolution(post as IssuePost, currentUser);
 
-  // Community context
   const postHasCommunity = isCommunityPost(post);
-  const communityId = getCommunityId(post);
 
-  // Media — simplify URL resolution using refined utility
+  // Media handling
   const allMediaUrls: string[] = (() => {
     const urls: string[] = [];
     if ("mediaUrls" in post && Array.isArray(post.mediaUrls)) {
@@ -882,25 +950,25 @@ export default function PostCard({
     return urls;
   })();
   const hasMedia = allMediaUrls.length > 0;
-  const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(url);
 
-  function prevImage(e?: React.MouseEvent) {
-    e?.stopPropagation();
-    setActiveImageIndex((i) => (i > 0 ? i - 1 : allMediaUrls.length - 1));
-  }
-  function nextImage(e?: React.MouseEvent) {
-    e?.stopPropagation();
-    setActiveImageIndex((i) => (i < allMediaUrls.length - 1 ? i + 1 : 0));
-  }
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // Handlers
   async function handleLike() {
-    if (isResolved) return;
+    if (isResolved || isProcessing) return;
+    setIsProcessing(true);
     const next = !liked;
+    const nextLikeCount = next ? likeCount + 1 : Math.max(0, likeCount - 1);
     setLiked(next);
-    if (next && disliked) { setDisliked(false); setDislikeCount((n) => Math.max(0, n - 1)); }
-    setLikeCount((n) => (next ? n + 1 : Math.max(0, n - 1)));
+    if (next && disliked) {
+      setDisliked(false);
+      setDislikeCount((n) => Math.max(0, n - 1));
+    }
+    setLikeCount(nextLikeCount);
     onLike?.(post.id, next);
+
+    window.dispatchEvent(new CustomEvent('POST_SYNC', {
+      detail: { postId: post.id, source: 'like', liked: next, likeCount: nextLikeCount }
+    }));
+
     const ep = `/api/interactions/${interactionType}/${post.id}/like`;
     try {
       const res = await apiPost(ep, {});
@@ -908,34 +976,62 @@ export default function PostCard({
       if (data && typeof data.liked === "boolean") setLiked(data.liked);
       if (data && typeof data.likeCount === "number") setLikeCount(data.likeCount);
     } catch {
+      const prevLikeCount = next ? Math.max(0, nextLikeCount - 1) : nextLikeCount + 1;
       setLiked(!next);
-      setLikeCount((n) => (next ? Math.max(0, n - 1) : n + 1));
+      setLikeCount(prevLikeCount);
+      window.dispatchEvent(new CustomEvent('POST_SYNC', {
+        detail: { postId: post.id, source: 'like', liked: !next, likeCount: prevLikeCount }
+      }));
+    } finally {
+      setIsProcessing(false);
     }
   }
 
   async function handleDislike() {
-    if (!isIssue || isResolved) return;
+    if (!isIssue || isResolved || isProcessing) return;
     alert("Dislike feature coming soon!");
   }
 
   async function handleSave() {
+    if (isProcessing) return;
+    setIsProcessing(true);
     const next = !saved;
     setSaved(next);
     onSave?.(post.id, next);
+    
+    window.dispatchEvent(new CustomEvent('POST_SYNC', {
+      detail: { postId: post.id, source: 'save', saved: next }
+    }));
+
     try {
-      const res = await apiPost(`/api/interactions/${interactionType}/${post.id}/save`, {});
-      const data = (res as any)?.data ?? res;
-      if (data && typeof data.saved === "boolean") setSaved(data.saved);
+      await apiPost(`/api/interactions/${interactionType}/${post.id}/save`, {});
     } catch {
       setSaved(!next);
+      window.dispatchEvent(new CustomEvent('POST_SYNC', {
+        detail: { postId: post.id, source: 'save', saved: !next }
+      }));
+    } finally {
+      setIsProcessing(false);
     }
   }
 
   async function handleShare() {
+    if (isProcessing) return;
+    setIsProcessing(true);
     flash();
-    setShareCount((n) => n + 1);
-    onShare?.(post.id);
-    await recordShare(interactionType, post.id);
+    try {
+      const nextShareCount = shareCount + 1;
+      setShareCount(nextShareCount);
+      onShare?.(post.id);
+      
+      window.dispatchEvent(new CustomEvent('POST_SYNC', {
+        detail: { postId: post.id, source: 'share', shareCount: nextShareCount }
+      }));
+
+      await recordShare(interactionType, post.id);
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   async function handleResolveConfirm(message: string) {
@@ -956,24 +1052,34 @@ export default function PostCard({
   }
 
   async function handleDelete() {
-    if (onDelete) { onDelete(post.id); return; }
-    if (!window.confirm("Delete this post?")) return;
+    if (!window.confirm("Are you sure you want to delete this post? This action cannot be undone.")) return;
+    
     setIsDeleting(true);
     try {
-      const ep = isIssue ? `/api/posts/${post.id}` : `/api/social-posts/${post.id}`;
-      await fetch(ep, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token")}` },
-      });
-      window.location.reload();
-    } catch {
-      alert("Failed to delete post");
+      // Correctly route to either /api/social-posts/ or /api/posts/
+      const isSocial = post.variant === "social" || post.variant === "community" || post.variant === "poll";
+      const ep = isSocial ? `/api/social-posts/${post.id}` : `/api/posts/${post.id}`;
+      
+      await apiDelete(ep);
+      
+      // Notify parent to remove it from the list without a full page reload if possible
+      if (onDelete) {
+        onDelete(post.id);
+      } else {
+        // Fallback for cases where onDelete isn't provided (unlikely in modern feeds)
+        window.location.reload();
+      }
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      alert("Failed to delete post. Please try again later.");
     } finally {
       setIsDeleting(false);
     }
   }
 
   async function handleJoinCommunity(cid: number) {
+    if (isProcessing) return;
+    setIsProcessing(true);
     const next = !isJoined;
     setIsJoined(next);
     try {
@@ -981,284 +1087,253 @@ export default function PostCard({
     } catch {
       setIsJoined(!next);
       alert("Could not join community.");
+    } finally {
+      setIsProcessing(false);
     }
   }
 
-  // Card border styling
+  async function handlePollVote(pollId: number, optionIds: number[]) {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      // 1. Notify parent if needed
+      onVote?.(pollId, optionIds);
+
+      // 2. Perform API call
+      const res = (await apiPost(`/api/polls/${pollId}/vote`, optionIds)) as any;
+
+      // 3. Update the post data locally if we're in a poll variant
+      if (post.variant === "poll" && res) {
+        const updatedPoll = toPostCardPost(res) as PollPost;
+        // Merge the updated poll data into the current post object
+        Object.assign(post, updatedPoll);
+        // Force a re-render by updating a dummy state if needed, 
+        // but here we just rely on PollBody's internal sync with post.votedOptionIds
+      }
+    } catch (err: any) {
+      console.error("Poll vote failed:", err);
+      alert(err.message === "403" || err.message === "401" ? "Please login to vote." : "Failed to submit vote. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   const borderClass = isGovt
-    ? "border-info/25 bg-info/3"
+    ? "border-[#1D4ED8]/25 bg-base-100"
     : isResolved
-    ? "border-success/25 bg-success/3"
-    : "border-base-300 bg-base-100";
+      ? "border-emerald-500/20 bg-base-100"
+      : "border-base-300 bg-base-100";
 
   return (
     <>
       <motion.div
-        whileHover={{ y: -2 }}
-        transition={{ duration: 0.18 }}
-        className={`rounded-2xl border ${borderClass} shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col`}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        whileHover={{ y: -4, boxShadow: "0 20px 60px -15px rgba(0,0,0,0.1)" }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className={`rounded-2xl border ${borderClass} shadow-md overflow-hidden flex flex-col backdrop-blur-sm relative group/card`}
       >
-        <div className="p-4 sm:p-5 flex flex-col gap-3">
-
-          {/* ── Community strip — ONLY for community posts & if not hidden ── */}
-          {postHasCommunity && communityId && !hideCommunityStrip && (
-            <CommunityStrip
-              post={post}
-              isJoined={isJoined}
-              onJoin={handleJoinCommunity}
-            />
+        <div className="p-5 sm:p-6 flex flex-col gap-4 flex-1">
+          {/* Community Strip at top */}
+          {postHasCommunity && !hideCommunityStrip && (
+            <CommunityStrip post={post} isJoined={isJoined} onJoin={handleJoinCommunity} />
           )}
 
-
-          {/* ── Author row ── */}
-          {isGovt ? (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-info/15 flex items-center justify-center shrink-0">
-                <BadgeCheck size={16} className="text-info" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold text-info">{(post as GovernmentPost).department}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] text-base-content/40">{post.timeAgo ?? "just now"}</span>
-                  <ScopePill
-                    scope={(post as GovernmentPost).broadcastScope}
-                    desc={(post as GovernmentPost).broadcastScopeDescription}
-                  />
+          {/* Header Row: Author + Join */}
+          <div className="flex items-start justify-between gap-3">
+            {isGovt ? (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-lg bg-red-400/10 flex items-center justify-center shrink-0">
+                  <BadgeCheck size={18} className="text-red-400" />
                 </div>
-              </div>
-            </div>
-          ) : (
-            <AuthorRow
-              post={post}
-              badge={(isCommunity ? (post as CommunityPost).authorRole : undefined)}
-              onDelete={handleDelete}
-              isDeleting={isDeleting}
-              showDelete={!!(post as any).canDelete}
-            />
-          )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-red-500/80 truncate">
+                    {(post as GovernmentPost).department}
+                  </p>
+                  <p className="text-[10px] text-base-content/50 mt-0.5">{post.timeAgo ?? "just now"}</p>
+                </div>
+              </motion.div>
+            ) : (
+              <AuthorRow
+                post={post}
+                badge={isCommunity ? (post as CommunityPost).authorRole : undefined}
+                onDelete={handleDelete}
+                isDeleting={isDeleting}
+                showDelete={(post as any).canDelete !== undefined ? !!(post as any).canDelete : (currentUser && post.username === currentUser.username)}
+                hideDelete={hideDelete}
+              />
+            )}
+          </div>
 
-          {/* ── Meta row: scope, status (issue posts only) ── */}
+          {/* Meta row */}
           {isIssue && (
-            <div className="flex flex-wrap items-center gap-1.5 -mt-1">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap items-center gap-2">
               <ScopePill
                 scope={"broadcastScope" in post ? (post as IssuePost).broadcastScope : undefined}
                 desc={"broadcastScopeDescription" in post ? (post as IssuePost).broadcastScopeDescription : undefined}
               />
               {showStatusBadge && <StatusBadge status={(post as IssuePost).status} />}
-            </div>
+            </motion.div>
           )}
 
-          {/* ── Mark Resolved banner — only when this dept is tagged & issue is ACTIVE ── */}
+          {/* Mark Resolved banner */}
           {govCanResolve && !resolving && (
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-warning/25 bg-warning/8 px-3 py-2.5 text-xs">
-              <span className="flex items-center gap-1.5 text-warning font-medium">
-                <AlertCircle size={13} />
-                Assigned to your department
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              onClick={() => setResolveOpen(true)}
+              className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-left"
+            >
+              <span className="flex items-center gap-2 text-xs font-bold text-amber-500">
+                <AlertCircle size={14} /> Assigned to your department
               </span>
-              <button onClick={() => setResolveOpen(true)} className="btn btn-success btn-xs rounded-lg">
-                <CheckCircle2 size={12} /> Mark Resolved
-              </button>
-            </div>
+              <span className="text-[10px] font-black uppercase text-amber-600">Resolve Now →</span>
+            </motion.button>
           )}
 
-          {isResolved && (
-            <div className="flex items-center gap-1.5 rounded-xl bg-success/10 px-3 py-2 text-xs font-medium text-success">
-              <CheckCircle2 size={13} />
-              Issue resolved
-              {(post as IssuePost).resolvedAt && (
-                <span className="opacity-70">· {(post as IssuePost).resolvedAt}</span>
-              )}
-            </div>
-          )}
-
-          {/* ── Content ── */}
-          <div>
-            <p className={`text-sm leading-relaxed whitespace-pre-wrap ${!expanded ? "line-clamp-3" : ""}`}>
+          {/* Content: Text Always Above */}
+          <motion.div className="space-y-2">
+            <motion.p className={`text-sm leading-relaxed text-base-content/90 ${!expanded ? "line-clamp-3" : ""}`}>
               {post.content}
-            </p>
+            </motion.p>
             {(post.content?.length ?? 0) > 160 && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="mt-1 text-xs font-semibold text-[#1D4ED8]/70 hover:text-[#1D4ED8] transition-colors"
-              >
-                {expanded ? "Show less" : "Read more"}
+              <button onClick={() => setExpanded(!expanded)} className="text-[11px] font-black uppercase tracking-wider text-blue-600">
+                {expanded ? "Less ↑" : "More ↓"}
               </button>
             )}
-          </div>
+          </motion.div>
 
-          {/* ── Hashtags / Tagged depts ── */}
+          {/* Hashtags / Tagged depts */}
           {((isIssue && ((post as IssuePost).taggedUsernames?.length ?? 0) > 0) ||
-            ((isSocial || isCommunity) && "hashtags" in post && ((post as SocialPost).hashtags?.length ?? 0) > 0)) && (
-            <div className="flex flex-wrap gap-1.5">
-              {isIssue &&
-                (post as IssuePost).taggedUsernames?.map((name) => (
-                  <span
-                    key={name}
-                    className="inline-flex items-center gap-1 rounded-full border border-info/25 bg-info/8 px-2 py-0.5 text-[11px] text-info"
-                  >
-                    <Building2 size={10} /> @{name}
-                  </span>
-                ))}
-              {(isSocial || isCommunity) &&
-                "hashtags" in post &&
-                (post as SocialPost).hashtags?.map((tag) => (
-                  <span key={tag} className="text-xs font-medium text-[#1D4ED8]/75">
-                    {tag}
-                  </span>
-                ))}
-            </div>
-          )}
-
-          {/* ── Media ── */}
-          {hasMedia && (
-            <div className="relative overflow-hidden rounded-2xl border border-base-content/8 -mx-1">
-              <div
-                className="relative h-56 sm:h-72 cursor-pointer"
-                onClick={() => setLightboxOpen(true)}
+            ("hashtags" in post && ((post as SocialPost).hashtags?.length ?? 0) > 0)) && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="flex flex-wrap gap-2"
               >
-                {!imgError[activeImageIndex] ? (
-                  isVideoUrl(allMediaUrls[activeImageIndex]) ? (
-                    <video
-                      src={allMediaUrls[activeImageIndex]}
-                      controls
-                      className="h-full w-full object-contain bg-black"
-                      onClick={(e) => e.stopPropagation()}
-                      onError={() => setImgError((prev) => ({ ...prev, [activeImageIndex]: true }))}
-                    />
-                  ) : (
-                    <img
-                      src={allMediaUrls[activeImageIndex]}
-                      alt={`Post media ${activeImageIndex + 1}`}
-                      className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
-                      onError={() => setImgError((prev) => ({ ...prev, [activeImageIndex]: true }))}
-                    />
-                  )
-                ) : (
-                  <div className="h-full w-full flex flex-col items-center justify-center bg-base-200/50 border border-base-content/5 rounded-xl">
-                    <div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center mb-2">
-                       <ImageIcon size={20} className="stroke-base-content/20" />
-                    </div>
-                    <p className="text-[10px] font-medium text-base-content/40 px-6 text-center">
-                      Legacy media currently unavailable
-                    </p>
-                  </div>
+                {isIssue &&
+                  (post as IssuePost).taggedUsernames?.map((name) => (
+                    <motion.span
+                      key={name}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"
+                    >
+                      <Building2 size={12} /> @{name}
+                    </motion.span>
+                  ))}
+                {("hashtags" in post) &&
+                  (post as SocialPost).hashtags?.map((tag) => (
+                    <motion.span
+                      key={tag}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                      {tag}
+                    </motion.span>
+                  ))}
+              </motion.div>
+            )}
+
+          {/* Conditional Body Layout */}
+          <div className={hasMedia ? "flex flex-col lg:flex-row gap-4 items-start" : "flex flex-col gap-4"}>
+            <div className="flex-1 min-w-0 flex flex-col gap-4 w-full lg:order-1">
+              {hasMedia && (
+                <div className="-mx-1">
+                  <ModernMediaCarousel mediaUrls={allMediaUrls} onExpand={() => setLightboxOpen(true)} />
+                </div>
+              )}
+
+              {/* Poll Variant Rendering */}
+              {post.variant === "poll" && (post as any).options && (
+                <PollBody post={post as PollPost} onVote={handlePollVote} isProcessing={isProcessing} />
+              )}
+
+              {isResolved && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs font-bold text-emerald-600">
+                  <CheckCircle2 size={14} /> Issue resolved
+                </div>
+              )}
+
+              {/* Horizontal Action Bar: Shown for all posts on mobile, and on desktop if NO media */}
+              <div className={`flex items-center gap-2 border-t border-base-300 pt-3 ${hasMedia ? "lg:hidden" : "flex"}`}>
+                <ActionPill onClick={handleLike} active={liked} disabled={isResolved || isProcessing} activeClass="border-pink-500 text-pink-500 bg-transparent">
+                  <Heart size={16} className={liked ? "fill-current" : ""} />
+                  <span>{likeCount || "0"}</span>
+                </ActionPill>
+                <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} activeClass="border-sky-500 text-sky-500 bg-transparent">
+                  <MessageSquare size={16} className={commentsOpen ? "fill-current" : ""} />
+                  <span>{post.commentCount ?? 0}</span>
+                </ActionPill>
+                <ActionPill onClick={handleShare} active={copied} disabled={isProcessing} activeClass="border-emerald-500 text-emerald-500 bg-transparent">
+                  <Share2 size={16} />
+                  <span>{copied ? "Copied!" : (shareCount || "0")}</span>
+                </ActionPill>
+                <div className="flex-1" />
+                <ActionPill onClick={handleSave} active={saved} disabled={isProcessing} activeClass="border-amber-500 text-amber-500 bg-transparent">
+                  <Bookmark size={16} className={saved ? "fill-current" : ""} />
+                </ActionPill>
+                {isIssue && (
+                  <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved || isProcessing} activeClass="bg-rose-500/10 text-rose-500">
+                    <ThumbsDown size={16} className={disliked ? "fill-current" : ""} />
+                    <span>{dislikeCount || "0"}</span>
+                  </ActionPill>
                 )}
               </div>
-
-              {allMediaUrls.length > 1 && (
-                <>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-base-100/80 backdrop-blur-sm shadow-md hover:bg-base-100 transition-all z-10"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-base-100/80 backdrop-blur-sm shadow-md hover:bg-base-100 transition-all z-10"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                  <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-                    {allMediaUrls.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={(e) => { e.stopPropagation(); setActiveImageIndex(i); }}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${i === activeImageIndex ? "w-4 bg-white" : "w-1.5 bg-white/50"}`}
-                      />
-                    ))}
-                  </div>
-                  <div className="absolute bottom-2.5 right-3 rounded-full bg-black/40 backdrop-blur-sm px-2 py-0.5 text-[11px] text-white z-10">
-                    {activeImageIndex + 1}/{allMediaUrls.length}
-                  </div>
-                </>
-              )}
             </div>
-          )}
 
-          {/* ── Action bar ── */}
-          <div className="flex items-center gap-0.5 border-t border-base-content/8 pt-2 -mb-1">
-            {/* Like */}
-            <ActionPill
-              onClick={handleLike}
-              active={liked}
-              disabled={isResolved}
-              activeClass="bg-[#1D4ED8]/10 text-[#1D4ED8]"
-            >
-              <ArrowUp size={16} />
-              <span className="text-xs">{likeCount > 0 ? likeCount : "Like"}</span>
-            </ActionPill>
-
-            {/* Dislike (issue only) */}
-            {isIssue && (
-              <ActionPill
-                onClick={handleDislike}
-                active={disliked}
-                disabled={isResolved}
-                activeClass="bg-error/10 text-error"
+            {/* Desktop Sidebar: Visible only when media exists and on lg: screens */}
+            {hasMedia && (
+              <motion.div
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="hidden lg:flex flex-col gap-2 p-1 rounded-2xl bg-base-200/50 border border-base-300 lg:order-2 shrink-0 sticky top-0"
               >
-                <ArrowDown size={16} />
-                <span className="text-xs">{dislikeCount > 0 ? dislikeCount : "Dislike"}</span>
-              </ActionPill>
+                <ActionPill onClick={handleLike} active={liked} disabled={isResolved || isProcessing} vertical activeClass="border-pink-500 text-pink-500 bg-transparent">
+                  <Heart size={18} className={liked ? "fill-current" : ""} />
+                  <span>{likeCount || "0"}</span>
+                </ActionPill>
+                <ActionPill onClick={() => setCommentsOpen(!commentsOpen)} active={commentsOpen} vertical activeClass="border-sky-500 text-sky-500 bg-transparent">
+                  <MessageSquare size={18} className={commentsOpen ? "fill-current" : ""} />
+                  <span>{post.commentCount ?? 0}</span>
+                </ActionPill>
+                <ActionPill onClick={handleShare} active={copied} disabled={isProcessing} vertical activeClass="border-emerald-500 text-emerald-500 bg-transparent">
+                  <Share2 size={18} />
+                  <span className="text-[9px] leading-tight mt-0.5">{copied ? "Copied" : (shareCount || "0")}</span>
+                </ActionPill>
+                <ActionPill onClick={handleSave} active={saved} disabled={isProcessing} vertical activeClass="border-amber-500 text-amber-500 bg-transparent">
+                  <Bookmark size={18} className={saved ? "fill-current" : ""} />
+                </ActionPill>
+                {isIssue && (
+                  <ActionPill onClick={handleDislike} active={disliked} disabled={isResolved || isProcessing} vertical activeClass="border-rose-500 text-rose-500 bg-transparent">
+                    <ThumbsDown size={18} className={disliked ? "fill-current" : ""} />
+                    <span>{dislikeCount || "0"}</span>
+                  </ActionPill>
+                )}
+              </motion.div>
             )}
-
-            {/* Comment */}
-            <ActionPill onClick={() => setCommentsOpen(!commentsOpen)}>
-              <MessageSquare size={16} />
-              <span className="text-xs">{post.commentCount > 0 ? post.commentCount : "Comment"}</span>
-            </ActionPill>
-
-            {/* Share */}
-            <ActionPill onClick={handleShare} active={copied} activeClass="text-success">
-              <Share2 size={16} />
-              <span className="text-xs">{copied ? "Copied!" : shareCount > 0 ? shareCount : "Share"}</span>
-            </ActionPill>
-
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Save */}
-            <ActionPill onClick={handleSave} active={saved} activeClass="bg-amber-500/10 text-amber-600">
-              <Bookmark size={16} className={saved ? "fill-current" : ""} />
-            </ActionPill>
           </div>
 
-          {/* ── Comments ── */}
+          {/* Comments section */}
           <AnimatePresence>
-            {isIssue && isResolved ? (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="flex items-center gap-1.5 rounded-xl bg-base-200 px-3 py-2 text-xs text-base-content/40 overflow-hidden"
-              >
-                <MessageSquare size={12} />
-                Comments are closed — issue resolved.
-              </motion.div>
-            ) : commentsOpen ? (
-              <CommentSection
-                postId={post.id}
-                postType={commentPostType(post.variant)}
-                commentCount={post.commentCount}
-                currentUsername={currentUser?.username}
-                currentRole={currentUser?.role}
-                defaultOpen={true}
-              />
-            ) : null}
+            {commentsOpen && (
+              <div className="mt-2 border-t border-base-300 pt-4">
+                <CommentSection
+                  postId={post.id}
+                  postType={commentPostType(post.variant)}
+                  commentCount={post.commentCount}
+                  currentUsername={currentUser?.username}
+                  currentRole={currentUser?.role}
+                  defaultOpen={true}
+                />
+              </div>
+            )}
           </AnimatePresence>
-
-          {/* ── Join prompt banner — only for community posts when not a member & not hidden ── */}
-          {postHasCommunity && !isJoined && communityId && !hideCommunityStrip && (
-            <JoinPromptBanner
-              communityName={
-                (post as CommunityPost).communityName ||
-                (post as any).communityName ||
-                "this community"
-              }
-              onJoin={(e) => { e.stopPropagation(); handleJoinCommunity(communityId); }}
-            />
-          )}
-
         </div>
       </motion.div>
 
@@ -1268,70 +1343,36 @@ export default function PostCard({
         onConfirm={handleResolveConfirm}
       />
 
-      {/* ── Lightbox ── */}
+      {/* Lightbox */}
       <AnimatePresence>
         {lightboxOpen && hasMedia && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
             onClick={() => setLightboxOpen(false)}
           >
-            <button
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
               onClick={() => setLightboxOpen(false)}
-              className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10"
+              className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition-all z-10"
             >
               <X size={20} />
-            </button>
+            </motion.button>
 
-            {allMediaUrls.length > 1 && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-sm text-white z-10">
-                {activeImageIndex + 1} / {allMediaUrls.length}
-              </div>
-            )}
-
-            {isVideoUrl(allMediaUrls[activeImageIndex]) ? (
-              <motion.video
-                key={activeImageIndex}
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                src={allMediaUrls[activeImageIndex]}
-                controls
-                autoPlay
-                className="max-h-[88vh] max-w-[92vw] rounded-xl"
-                onClick={(e) => e.stopPropagation()}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-h-[90vh] max-w-[90vw]"
+            >
+              <ModernMediaCarousel
+                mediaUrls={allMediaUrls}
+                onExpand={() => { }}
               />
-            ) : (
-              <motion.img
-                key={activeImageIndex}
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                src={allMediaUrls[activeImageIndex]}
-                alt=""
-                className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain"
-                onClick={(e) => e.stopPropagation()}
-              />
-            )}
-
-            {allMediaUrls.length > 1 && (
-              <>
-                <button
-                  onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-                >
-                  <ChevronRight size={24} />
-                </button>
-              </>
-            )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
